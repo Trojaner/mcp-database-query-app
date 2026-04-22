@@ -1,0 +1,124 @@
+{
+  "manifest_version": "0.3",
+  "name": "mcp-database-query-app",
+  "display_name": "MCP Database Query App",
+  "version": "0.1.9",
+  "description": "Database management MCP server for PostgreSQL, SQL Server etc. Provides tools for connecting, querying, schema introspection, script management, and interactive visualization.",
+  "long_description": "MCP Database Query App is a full-featured MCP server for database operations. It supports PostgreSQL and SQL Server with features including parameterised queries, result pagination, execution plans, saved scripts, schema exploration, notes on database objects, and interactive UI components for data visualization.",
+  "author": {
+    "name": "Enes Sadık Özbek"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Trojaner/mcp-database-query-app"
+  },
+  "keywords": ["database", "postgresql", "sqlserver", "sql", "mcp", "query"],
+  "server": {
+    "type": "binary",
+    "entry_point": "server/mcp-database-query-app",
+    "mcp_config": {
+      "command": "${__dirname}/server/mcp-database-query-app",
+      "env": {
+        "McpDatabaseQueryApp__Transport__Http__Enabled": "false",
+        "McpDatabaseQueryApp__Transport__Stdio__Enabled": "true",
+        "McpDatabaseQueryApp__ReadOnlyByDefault": "${user_config.read_only}",
+        "McpDatabaseQueryApp__MaxResultLimit": "${user_config.max_result_limit}",
+        "McpDatabaseQueryApp__Ui__Enabled": "${user_config.ui_enabled}",
+        "McpDatabaseQueryApp__Secrets__KeyRef": "ENV:MCP_DATABASE_QUERY_APP_MASTER_KEY",
+        "MCP_DATABASE_QUERY_APP_MASTER_KEY": "${user_config.master_key}"
+      }
+    }
+  },
+  "user_config": {
+    "read_only": {
+      "type": "boolean",
+      "title": "Read-only mode",
+      "description": "Block INSERT/UPDATE/DELETE/DDL by default. Individual sessions can still opt in to writes when permitted.",
+      "default": true,
+      "required": false
+    },
+    "max_result_limit": {
+      "type": "number",
+      "title": "Max result rows",
+      "description": "Hard cap on rows returned by a single query. Lower to reduce memory pressure; raise if you routinely work with large result sets.",
+      "default": 5000,
+      "min": 1,
+      "max": 1000000,
+      "required": false
+    },
+    "ui_enabled": {
+      "type": "boolean",
+      "title": "Enable UI tools",
+      "description": "Expose the ui_chart, ui_schema_view, and db_builder_open tools that render interactive HTML components in the client.",
+      "default": true,
+      "required": false
+    },
+    "master_key": {
+      "type": "string",
+      "title": "Master key",
+      "description": "AES-256 key for encrypting stored database credentials. Generate with: openssl rand -base64 32",
+      "sensitive": true,
+      "required": false
+    }
+  },
+  "tools": [
+    { "name": "db_connect", "description": "Open a database connection." },
+    { "name": "db_disconnect", "description": "Close a database connection." },
+    { "name": "db_ping", "description": "Check connectivity to a database." },
+    { "name": "db_list_predefined", "description": "List predefined connection profiles." },
+    { "name": "db_list_connections", "description": "List active connections." },
+    { "name": "db_query", "description": "Run a parameterised SELECT query." },
+    { "name": "db_query_next_page", "description": "Fetch the next page of a paginated query." },
+    { "name": "db_execute", "description": "Execute a non-query SQL statement." },
+    { "name": "db_explain", "description": "Return the execution plan for a query." },
+    { "name": "db_schemas_list", "description": "List schemas in the current database." },
+    { "name": "db_tables_list", "description": "List tables in a schema." },
+    { "name": "db_table_describe", "description": "Describe a table's columns, keys, and indexes." },
+    { "name": "db_describe_batch", "description": "Describe multiple objects in one call." },
+    { "name": "db_schema_describe", "description": "Describe a schema and its contents." },
+    { "name": "db_database_describe", "description": "Describe a database's schemas and objects." },
+    { "name": "db_roles_list", "description": "List database roles and users." },
+    { "name": "db_databases_list", "description": "List databases on a server." },
+    { "name": "db_predefined_get", "description": "Get a predefined connection profile." },
+    { "name": "db_predefined_create", "description": "Create a predefined connection profile." },
+    { "name": "db_predefined_update", "description": "Update a predefined connection profile." },
+    { "name": "db_predefined_delete", "description": "Delete a predefined connection profile." },
+    { "name": "scripts_list", "description": "List saved SQL scripts." },
+    { "name": "scripts_get", "description": "Get a saved SQL script." },
+    { "name": "scripts_create", "description": "Create a saved SQL script." },
+    { "name": "scripts_update", "description": "Update a saved SQL script." },
+    { "name": "scripts_delete", "description": "Delete a saved SQL script." },
+    { "name": "scripts_run", "description": "Run a saved SQL script." },
+    { "name": "notes_set", "description": "Attach a note to a database object." },
+    { "name": "notes_get", "description": "Get a note on a database object." },
+    { "name": "notes_list", "description": "List notes on database objects." },
+    { "name": "notes_delete", "description": "Delete a note on a database object." },
+    { "name": "db_builder_open", "description": "Open the interactive query builder UI." },
+    { "name": "ui_chart", "description": "Render a chart from a result set." },
+    { "name": "ui_schema_view", "description": "Open an interactive schema viewer." },
+    { "name": "ui_results_export_csv", "description": "Export a result set to CSV." }
+  ],
+  "prompts": [
+    {
+      "name": "explore-database",
+      "description": "Guided walkthrough of a database's schemas and tables.",
+      "text": "Connect to the target database, list its schemas and tables, then summarise the structure and notable objects. Highlight tables with unusual size, missing primary keys, or notes attached."
+    },
+    {
+      "name": "safe-write",
+      "description": "Plan and execute a write with guardrails and preview.",
+      "text": "Before running any INSERT/UPDATE/DELETE, show the affected rows with a SELECT preview, confirm row counts, wrap the change in a transaction, and require explicit confirmation before COMMIT."
+    },
+    {
+      "name": "migrate-script",
+      "description": "Convert a SQL script between dialects.",
+      "text": "Translate the provided SQL script from its source dialect to the target dialect (e.g. SQL Server to PostgreSQL). Call out syntax, type, and function differences, and flag anything that cannot be translated automatically."
+    },
+    {
+      "name": "explain-slow-query",
+      "description": "Analyse and suggest fixes for a slow query.",
+      "text": "Run db_explain on the query, interpret the plan, identify the dominant cost (scans, joins, sorts, missing indexes), and propose concrete fixes with expected impact."
+    }
+  ]
+}

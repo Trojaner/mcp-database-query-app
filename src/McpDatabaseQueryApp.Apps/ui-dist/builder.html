@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>MCP Database Query App SQL Builder</title>
+<style>
+:root { color-scheme: light dark; font-family: var(--font-sans, system-ui, sans-serif); }
+body { margin: 0; padding: 12px; background: var(--color-background-primary, Canvas); color: var(--color-text-primary, CanvasText); display: flex; flex-direction: column; gap: 10px; font-family: var(--font-sans, system-ui, sans-serif); }
+fieldset { border: 1px solid var(--color-border-primary, #8884); border-radius: var(--border-radius-sm, 4px); padding: 8px; background: var(--color-background-secondary, transparent); }
+legend { font-size: 12px; opacity: 0.7; padding: 0 4px; }
+label { display: block; font-size: 12px; margin: 2px 0; }
+button { padding: 4px 10px; font-size: 13px; border: 1px solid var(--color-border-primary, #8884); background: var(--color-background-secondary, ButtonFace); color: var(--color-text-primary, ButtonText); border-radius: var(--border-radius-sm, 4px); cursor: pointer; font-family: var(--font-sans, system-ui, sans-serif); }
+select, input { padding: 4px 6px; font-size: 13px; border: 1px solid var(--color-border-primary, #8884); background: var(--color-background-secondary, Field); color: var(--color-text-primary, FieldText); border-radius: var(--border-radius-sm, 4px); font-family: var(--font-sans, system-ui, sans-serif); }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+pre { background: var(--color-background-secondary, #8881); padding: 8px; border-radius: var(--border-radius-sm, 4px); font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 12px; white-space: pre-wrap; color: var(--color-text-primary, CanvasText); }
+header.app-header { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+header.app-header h1 { font-size: 14px; margin: 0; font-weight: 600; }
+.header-actions { display: flex; gap: 6px; }
+</style>
+</head>
+<body>
+<header class="app-header">
+    <h1>SQL Builder</h1>
+    <div class="header-actions">
+        <button id="ask-model" type="button" title="Ask the model to explain the current query">Ask model</button>
+        <button id="toggle-fullscreen" type="button" hidden>Maximize</button>
+    </div>
+</header>
+<fieldset>
+    <legend>Source</legend>
+    <div class="row">
+        <label>Connection <select id="conn"><option>Select a connection…</option></select></label>
+        <label>Schema <select id="schema"></select></label>
+        <label>Table <select id="table"></select></label>
+        <button id="reload" type="button">Reload</button>
+    </div>
+</fieldset>
+<fieldset>
+    <legend>Columns</legend>
+    <div id="columns"></div>
+</fieldset>
+<fieldset>
+    <legend>Filters</legend>
+    <div id="filters"></div>
+    <button id="add-filter" type="button">+ Add filter</button>
+</fieldset>
+<fieldset>
+    <legend>Preview</legend>
+    <pre id="sql"></pre>
+    <button id="run" type="button">Run</button>
+    <button id="save" type="button">Save as script</button>
+</fieldset>
+<noscript>
+    <p>The SQL builder UI requires JavaScript. Use db_tables_list / db_query directly.</p>
+</noscript>
+<script>"use strict";(()=>{var re=1,g=new Map,R=null,C=null,ie=!1,w=null,l,j=[],D=null,ae,le=!1,A=null,ce,ue=!1,k=null,I=!1,M=null,H=!1;function N(e){let n=window.parent&&window.parent!==window?window.parent:null;if(!n)throw new Error("no parent frame");n.postMessage(e,"*")}function h(e,n,t=15e3){let o=re++;return new Promise((s,i)=>{let a=setTimeout(()=>{g.delete(o)&&i(new Error(`request ${e} timed out`))},t);g.set(o,{resolve:v=>{clearTimeout(a),s(v)},reject:v=>{clearTimeout(a),i(v)}});try{N({jsonrpc:"2.0",id:o,method:e,params:n})}catch(v){g.delete(o),clearTimeout(a),i(v)}})}function O(e,n){N({jsonrpc:"2.0",method:e,params:n})}function de(e){return typeof e=="object"&&e!==null&&e.jsonrpc==="2.0"}function F(){if(!l)return;let e=l;for(let n of j)try{n(e)}catch{}}function fe(e){!e||typeof e!="object"||(l={...l??{},...e})}function me(e){let n=e.data;if(de(n)){if("id"in n&&n.id!==void 0&&!("method"in n)){let t=n,o=g.get(t.id);if(!o)return;g.delete(t.id),t.error?o.reject(new Error(t.error.message)):o.resolve(t.result);return}if("method"in n){let t=n;switch(t.method){case"ui/notifications/tool-result":{let o=t.params;if(!o)return;R?R(o):C=o;return}case"ui/notifications/host-context-changed":{fe(t.params),F();return}case"ui/notifications/tool-input":{D?D(t.params):(ae=t.params,le=!0);return}case"ui/notifications/tool-input-partial":{A?A(t.params):(ce=t.params,ue=!0);return}case"ui/notifications/tool-cancelled":{k?k():I=!0;return}case"ui/resource-teardown":{M?M():H=!0;return}}}}}window.addEventListener("message",me);function W(e=5e3){return w||(w=(async()=>{if(!window.parent||window.parent===window)throw new Error("not embedded in a host frame");let n=await h("ui/initialize",{protocolVersion:"2026-01-26",appInfo:{name:"mcp-database-query-app-ui",version:"0.1.0"},appCapabilities:{availableDisplayModes:["inline","fullscreen"]}},e);n&&typeof n=="object"&&n.hostContext?l=n.hostContext:l=l??{},O("ui/notifications/initialized",{}),ie=!0,F()})(),w)}function _(e){if(R=e,C){let n=C;C=null,e(n)}}function L(e,n){return h("tools/call",{name:e,arguments:n})}function K(e){return h("resources/read",{uri:e})}function B(){return l}function V(e){if(j.push(e),l)try{e(l)}catch{}}function S(e){if(!e)return;let n=e.styles?.variables;if(n)for(let[o,s]of Object.entries(n))document.documentElement.style.setProperty(o,s);e.theme&&(document.documentElement.dataset.theme=e.theme);let t=e.styles?.css?.fonts;if(t){let o="mcp-database-query-app-host-fonts";if(!document.getElementById(o)){let s=document.createElement("style");s.id=o,s.textContent=t,document.head.appendChild(s)}}}var T=null,y=null;function pe(e,n){y={width:e,height:n},T===null&&(T=setTimeout(()=>{if(T=null,y){let t=y;y=null;try{O("ui/notifications/size-changed",{width:t.width,height:t.height})}catch{}}},100))}function Z(e){let n=e??document.body,t=()=>{let o=document.documentElement,s=Math.max(o.scrollWidth,n.scrollWidth),i=Math.max(o.scrollHeight,n.scrollHeight);pe(s,i)};if(t(),typeof ResizeObserver<"u"){let o=new ResizeObserver(()=>t());o.observe(n),o.observe(document.documentElement),new MutationObserver(()=>t()).observe(n,{childList:!0,subtree:!0,attributes:!0,characterData:!0})}else window.addEventListener("resize",t)}function G(e){return h("ui/message",{role:"user",content:[{type:"text",text:e}]})}function Q(e){return h("ui/request-display-mode",{mode:e})}function U(e){k=e,I&&(I=!1,e())}function X(e){M=e,H&&(H=!1,e())}var P={connectionId:""},r=document.getElementById("conn"),c=document.getElementById("schema"),m=document.getElementById("table"),Y=document.getElementById("columns"),ve=document.getElementById("filters"),p=document.getElementById("sql"),q=document.getElementById("run"),ge=document.getElementById("ask-model"),u=document.getElementById("toggle-fullscreen"),x=[],d=new Set,b=[],$,ee=!0;function he(e,...n){if(e){for(let t of n)if(e[t]!==void 0)return e[t]}}async function E(e,n){try{let o=(await K(e)).contents?.[0]?.text;return o?JSON.parse(o):n}catch(t){return console.warn(`Could not read ${e}`,t),n}}async function ne(){let e=await E("mcpdb://connections",[]);r.innerHTML="<option value=''>Select a connection\u2026</option>";for(let n of e){let t=document.createElement("option");t.value=n.id,t.textContent=`${n.descriptor.name} (${n.id})`,r.appendChild(t)}P.connectionId&&(r.value=P.connectionId),await z()}async function z(){if(c.innerHTML="",!r.value)return;let e=await E(`mcpdb://connections/${r.value}/schemas`,[]);for(let n of e){let t=document.createElement("option");t.value=n.name,t.textContent=n.name,c.appendChild(t)}await te()}async function te(){if(m.innerHTML="",!r.value||!c.value)return;let e=await E(`mcpdb://connections/${r.value}/schemas/${c.value}/tables`,{});for(let n of e.items??[]){let t=document.createElement("option");t.value=n.name,t.textContent=n.name,m.appendChild(t)}await oe()}async function oe(){if(Y.innerHTML="",d.clear(),x=[],!r.value||!c.value||!m.value)return;x=(await E(`mcpdb://connections/${r.value}/schemas/${c.value}/tables/${m.value}`,{})).columns??[];for(let n of x){let t=document.createElement("label"),o=document.createElement("input");o.type="checkbox",o.checked=!0,d.add(n.name),o.addEventListener("change",()=>{o.checked?d.add(n.name):d.delete(n.name),f()}),t.append(o,` ${n.name}`),Y.appendChild(t)}f()}function f(){let e=c.value,n=m.value;if(!e||!n){p.textContent="";return}let t=d.size===0?"*":Array.from(d).join(", "),o=b.length===0?"":" WHERE "+b.filter(s=>s.column&&s.op).map((s,i)=>`${s.column} ${s.op} @p${i}`).join(" AND ");p.textContent=`SELECT ${t}
+FROM ${e}.${n}${o}
+LIMIT 100;`}function we(){let e=document.createElement("div");e.className="row";let n=document.createElement("select");for(let i of x){let a=document.createElement("option");a.value=i.name,a.textContent=i.name,n.appendChild(a)}let t=document.createElement("select");for(let i of["=","<>","<",">","LIKE"]){let a=document.createElement("option");a.value=i,a.textContent=i,t.appendChild(a)}let o=document.createElement("input"),s={column:n.value,op:t.value,value:""};b.push(s),n.addEventListener("change",()=>{s.column=n.value,f()}),t.addEventListener("change",()=>{s.op=t.value,f()}),o.addEventListener("input",()=>{s.value=o.value,f()}),e.append(n,t,o),ve.appendChild(e),f()}function J(e){q.disabled=e,q.textContent=e?"Running\u2026":"Run"}function se(e){if($=e?.displayMode,!ee){u.hidden=!0;return}let n=e?.availableDisplayModes;if(n&&!n.includes("fullscreen")){u.hidden=!0;return}u.hidden=!1,u.textContent=$==="fullscreen"?"Minimize":"Maximize"}r.addEventListener("change",z);c.addEventListener("change",te);m.addEventListener("change",oe);document.getElementById("reload").addEventListener("click",()=>void ne());document.getElementById("add-filter").addEventListener("click",we);q.addEventListener("click",async()=>{let e={};b.forEach((n,t)=>{e[`p${t}`]=n.value}),J(!0);try{await L("db_query",{connectionId:r.value,sql:p.textContent,parameters:e})}catch(n){console.warn("db_query failed",n)}finally{J(!1)}});document.getElementById("save").addEventListener("click",async()=>{if(!p.textContent)return;let e=prompt("Script name?");if(e)try{await L("scripts_create",{name:e,sqlText:p.textContent,destructive:!1})}catch(n){console.warn("scripts_create failed",n)}});ge.addEventListener("click",async()=>{let e=p.textContent;if(e)try{await G(`Explain this query and its expected results: 
+
+`+e)}catch(n){console.warn("sendChatMessage failed",n)}});u.addEventListener("click",async()=>{let e=$==="fullscreen"?"inline":"fullscreen";try{await Q(e)}catch(n){ee=!1,u.hidden=!0,console.warn("requestDisplayMode failed",n)}});_(e=>{let n=e.structuredContent;if(n===void 0){let o=e.content?.[0]?.text;if(typeof o=="string"&&o.length>0)try{n=JSON.parse(o)}catch{}}let t=he(n,"connectionId","ConnectionId");t&&(P.connectionId=t,r.value!==t&&Array.from(r.options).some(o=>o.value===t)&&(r.value=t,z()))});V(e=>{S(e),se(e)});U(()=>{J(!1)});X(()=>{});S(B());se(B());(async()=>{try{await W(),Z(),await ne()}catch(e){console.warn("bridge connect failed",e)}})();})();
+</script>
+</body>
+</html>

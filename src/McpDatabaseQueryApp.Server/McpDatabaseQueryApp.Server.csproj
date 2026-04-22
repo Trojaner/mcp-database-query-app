@@ -1,0 +1,54 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>McpDatabaseQueryApp.Server</RootNamespace>
+    <AssemblyName>mcp-database-query-app</AssemblyName>
+    <UserSecretsId>mcp-database-query-app-dev-secrets</UserSecretsId>
+
+    <!-- Native AOT + source generators for trim-safe binding. -->
+    <!-- PublishAot is only activated during `dotnet publish`; regular build is unaffected. -->
+    <IsAotCompatible>true</IsAotCompatible>
+    <EnableConfigurationBindingGenerator>true</EnableConfigurationBindingGenerator>
+    <EnableRequestDelegateGenerator>true</EnableRequestDelegateGenerator>
+
+    <!-- Suppress warnings we cannot fix without upstream library changes.
+         Re-enable after auditing IL2026/IL3050 output on publish. -->
+    <NoWarn>$(NoWarn);IL2026;IL3050;IL2104</NoWarn>
+  </PropertyGroup>
+
+  <!-- Reflection-based JSON is required by ModelContextProtocol tool discovery
+       for JIT (non-AOT) builds. Only disable it when actually publishing AOT,
+       where the upstream SDK path is source-generator-based. -->
+  <PropertyGroup Condition="'$(PublishAot)' == 'true'">
+    <JsonSerializerIsReflectionEnabledByDefault>false</JsonSerializerIsReflectionEnabledByDefault>
+    <IlcOptimizationPreference>Size</IlcOptimizationPreference>
+    <OptimizationPreference>Size</OptimizationPreference>
+    <StripSymbols>true</StripSymbols>
+    <DebuggerSupport>false</DebuggerSupport>
+    <EventSourceSupport>false</EventSourceSupport>
+    <HttpActivityPropagationSupport>false</HttpActivityPropagationSupport>
+    <MetadataUpdaterSupport>false</MetadataUpdaterSupport>
+    <XmlResolverIsNetworkingEnabledByDefault>false</XmlResolverIsNetworkingEnabledByDefault>
+    <EnableUnsafeBinaryFormatterSerialization>false</EnableUnsafeBinaryFormatterSerialization>
+    <EnableUnsafeUTF7Encoding>false</EnableUnsafeUTF7Encoding>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ModelContextProtocol" />
+    <PackageReference Include="ModelContextProtocol.AspNetCore" />
+    <PackageReference Include="Dapper.AOT" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\McpDatabaseQueryApp.Core\McpDatabaseQueryApp.Core.csproj" />
+    <ProjectReference Include="..\McpDatabaseQueryApp.Providers.Postgres\McpDatabaseQueryApp.Providers.Postgres.csproj" />
+    <ProjectReference Include="..\McpDatabaseQueryApp.Providers.SqlServer\McpDatabaseQueryApp.Providers.SqlServer.csproj" />
+    <ProjectReference Include="..\McpDatabaseQueryApp.Apps\McpDatabaseQueryApp.Apps.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+</Project>

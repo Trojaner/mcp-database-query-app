@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsAotCompatible>true</IsAotCompatible>
+    <UiSourceDir>$(MSBuildThisFileDirectory)ui</UiSourceDir>
+    <UiBuildOutputDir>$(MSBuildThisFileDirectory)ui-dist</UiBuildOutputDir>
+    <UiBuildStamp>$(IntermediateOutputPath)ui.build.stamp</UiBuildStamp>
+    <SkipUiBuild Condition="'$(SkipUiBuild)' == ''">false</SkipUiBuild>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ModelContextProtocol" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\McpDatabaseQueryApp.Core\McpDatabaseQueryApp.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="ui-dist\results.html" Condition="Exists('ui-dist\results.html')">
+      <LogicalName>McpDatabaseQueryApp.Apps.ui.results.html</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="ui-dist\builder.html" Condition="Exists('ui-dist\builder.html')">
+      <LogicalName>McpDatabaseQueryApp.Apps.ui.builder.html</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="ui-dist\chart.html" Condition="Exists('ui-dist\chart.html')">
+      <LogicalName>McpDatabaseQueryApp.Apps.ui.chart.html</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="ui-dist\schema-viewer.html" Condition="Exists('ui-dist\schema-viewer.html')">
+      <LogicalName>McpDatabaseQueryApp.Apps.ui.schema-viewer.html</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
+  <Target Name="BuildUi" BeforeTargets="BeforeBuild" Condition="'$(SkipUiBuild)' != 'true'">
+    <ItemGroup>
+      <UiSources Include="$(UiSourceDir)\**\*.ts;$(UiSourceDir)\**\*.html;$(UiSourceDir)\**\*.css;$(UiSourceDir)\package.json;$(UiSourceDir)\tsconfig.json;$(UiSourceDir)\build.mjs" />
+    </ItemGroup>
+    <MakeDir Directories="$(IntermediateOutputPath)" />
+    <Message Importance="high" Text="[McpDatabaseQueryApp.Apps] Building UI bundles via esbuild..." />
+    <Exec Command="npm install --prefer-offline --no-audit --no-fund --silent" WorkingDirectory="$(UiSourceDir)" Condition="!Exists('$(UiSourceDir)\node_modules')" />
+    <Exec Command="node build.mjs" WorkingDirectory="$(UiSourceDir)" />
+    <Touch Files="$(UiBuildStamp)" AlwaysCreate="true" />
+  </Target>
+
+  <Target Name="CleanUi" AfterTargets="Clean">
+    <RemoveDir Directories="$(UiBuildOutputDir)" Condition="Exists('$(UiBuildOutputDir)')" />
+  </Target>
+</Project>

@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>MCP Database Query App Schema Viewer</title>
+<style>
+:root { color-scheme: light dark; }
+body {
+    margin: 0;
+    padding: 0;
+    background: var(--color-background-primary, Canvas);
+    color: var(--color-text-primary, CanvasText);
+    font-family: var(--font-sans, system-ui, sans-serif);
+    overflow: hidden;
+}
+#viewport { position: relative; width: 100vw; height: 100vh; display: flex; flex-direction: column; }
+#toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 6px 10px;
+    background: var(--color-background-secondary, #8882);
+    border-bottom: 1px solid var(--color-border-primary, #8884);
+    font-size: 12px;
+    flex: 0 0 auto;
+}
+#toolbar button {
+    font: inherit;
+    color: inherit;
+    background: var(--color-background-primary, Canvas);
+    border: 1px solid var(--color-border-primary, #8884);
+    border-radius: 4px;
+    padding: 4px 10px;
+    cursor: pointer;
+}
+#toolbar button:hover { background: var(--color-background-secondary, #8882); }
+#stage { position: relative; flex: 1 1 auto; display: flex; min-height: 0; }
+#container { position: relative; flex: 1 1 auto; overflow: auto; }
+#svg-overlay { position: absolute; top: 0; left: 0; pointer-events: none; }
+.table-box {
+    position: absolute;
+    border: 1px solid var(--color-border-primary, #8884);
+    border-radius: 4px;
+    background: var(--color-background-secondary, Canvas);
+    min-width: 180px;
+    font-size: 12px;
+    box-shadow: 0 1px 4px #0002;
+    cursor: pointer;
+}
+.table-box.selected { outline: 2px solid var(--color-accent, #4a9eff); outline-offset: -1px; }
+.table-header {
+    padding: 6px 8px;
+    font-weight: 600;
+    font-size: 13px;
+    background: var(--color-background-tertiary, #8882);
+    border-bottom: 1px solid var(--color-border-primary, #8884);
+    border-radius: 4px 4px 0 0;
+}
+.table-col {
+    padding: 3px 8px;
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    border-bottom: 1px solid var(--color-border-primary, #8881);
+    font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+}
+.table-col:last-child { border-bottom: none; }
+.col-pk { color: #e6a817; font-weight: 700; font-size: 10px; min-width: 18px; }
+.col-name { flex: 1; }
+.col-type { opacity: 0.6; font-size: 11px; }
+.empty { padding: 24px; text-align: center; opacity: 0.7; }
+#details-panel {
+    flex: 0 0 320px;
+    max-width: 40vw;
+    border-left: 1px solid var(--color-border-primary, #8884);
+    background: var(--color-background-secondary, Canvas);
+    overflow: auto;
+    padding: 12px 14px;
+    font-size: 12px;
+    display: none;
+}
+#details-panel.open { display: block; }
+#details-panel h2 { font-size: 13px; margin: 0 0 8px 0; }
+#details-panel h3 { font-size: 12px; margin: 12px 0 4px 0; opacity: 0.8; text-transform: uppercase; letter-spacing: 0.05em; }
+#details-panel table { width: 100%; border-collapse: collapse; font-family: var(--font-mono, ui-monospace, monospace); }
+#details-panel th, #details-panel td { text-align: left; padding: 3px 6px; border-bottom: 1px solid var(--color-border-primary, #8881); }
+#details-panel th { opacity: 0.7; font-weight: 500; }
+#details-close {
+    float: right;
+    background: transparent;
+    border: none;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+    opacity: 0.7;
+    font-size: 14px;
+}
+#details-loading, #details-error { opacity: 0.7; font-style: italic; }
+</style>
+</head>
+<body>
+<div id="viewport">
+    <div id="toolbar">
+        <button id="toggle-fullscreen" type="button" title="Maximize">Maximize</button>
+    </div>
+    <div id="stage">
+        <div id="container">
+            <svg id="svg-overlay"></svg>
+        </div>
+        <aside id="details-panel" aria-label="Table details"></aside>
+    </div>
+</div>
+<div id="empty" class="empty" hidden>No schema data available.</div>
+<noscript>
+    <p>This view requires JavaScript. Use db_describe_batch to explore the schema.</p>
+</noscript>
+<!-- INLINE_SCRIPT -->
+</body>
+</html>

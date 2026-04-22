@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>MCP Database Query App SQL Builder</title>
+<style>
+:root { color-scheme: light dark; font-family: var(--font-sans, system-ui, sans-serif); }
+body { margin: 0; padding: 12px; background: var(--color-background-primary, Canvas); color: var(--color-text-primary, CanvasText); display: flex; flex-direction: column; gap: 10px; font-family: var(--font-sans, system-ui, sans-serif); }
+fieldset { border: 1px solid var(--color-border-primary, #8884); border-radius: var(--border-radius-sm, 4px); padding: 8px; background: var(--color-background-secondary, transparent); }
+legend { font-size: 12px; opacity: 0.7; padding: 0 4px; }
+label { display: block; font-size: 12px; margin: 2px 0; }
+button { padding: 4px 10px; font-size: 13px; border: 1px solid var(--color-border-primary, #8884); background: var(--color-background-secondary, ButtonFace); color: var(--color-text-primary, ButtonText); border-radius: var(--border-radius-sm, 4px); cursor: pointer; font-family: var(--font-sans, system-ui, sans-serif); }
+select, input { padding: 4px 6px; font-size: 13px; border: 1px solid var(--color-border-primary, #8884); background: var(--color-background-secondary, Field); color: var(--color-text-primary, FieldText); border-radius: var(--border-radius-sm, 4px); font-family: var(--font-sans, system-ui, sans-serif); }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+pre { background: var(--color-background-secondary, #8881); padding: 8px; border-radius: var(--border-radius-sm, 4px); font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 12px; white-space: pre-wrap; color: var(--color-text-primary, CanvasText); }
+header.app-header { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+header.app-header h1 { font-size: 14px; margin: 0; font-weight: 600; }
+.header-actions { display: flex; gap: 6px; }
+</style>
+</head>
+<body>
+<header class="app-header">
+    <h1>SQL Builder</h1>
+    <div class="header-actions">
+        <button id="ask-model" type="button" title="Ask the model to explain the current query">Ask model</button>
+        <button id="toggle-fullscreen" type="button" hidden>Maximize</button>
+    </div>
+</header>
+<fieldset>
+    <legend>Source</legend>
+    <div class="row">
+        <label>Connection <select id="conn"><option>Select a connection…</option></select></label>
+        <label>Schema <select id="schema"></select></label>
+        <label>Table <select id="table"></select></label>
+        <button id="reload" type="button">Reload</button>
+    </div>
+</fieldset>
+<fieldset>
+    <legend>Columns</legend>
+    <div id="columns"></div>
+</fieldset>
+<fieldset>
+    <legend>Filters</legend>
+    <div id="filters"></div>
+    <button id="add-filter" type="button">+ Add filter</button>
+</fieldset>
+<fieldset>
+    <legend>Preview</legend>
+    <pre id="sql"></pre>
+    <button id="run" type="button">Run</button>
+    <button id="save" type="button">Save as script</button>
+</fieldset>
+<noscript>
+    <p>The SQL builder UI requires JavaScript. Use db_tables_list / db_query directly.</p>
+</noscript>
+<!-- INLINE_SCRIPT -->
+</body>
+</html>

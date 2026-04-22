@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>MCP Database Query App Results</title>
+<style>
+:root {
+    color-scheme: light dark;
+    font-family: var(--font-sans, system-ui, sans-serif);
+}
+body {
+    margin: 0;
+    padding: 12px;
+    background: var(--color-background-primary, Canvas);
+    color: var(--color-text-primary, CanvasText);
+    font-family: var(--font-sans, system-ui, sans-serif);
+}
+header { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+input[type="search"] {
+    flex: 1;
+    min-width: 180px;
+    padding: 4px 8px;
+    font-size: 14px;
+    border: 1px solid var(--color-border-primary, #8884);
+    border-radius: var(--border-radius-sm, 4px);
+    background: var(--color-background-primary, Field);
+    color: var(--color-text-primary, FieldText);
+    font-family: var(--font-sans, system-ui, sans-serif);
+}
+button {
+    padding: 4px 10px;
+    font-size: 13px;
+    border: 1px solid var(--color-border-primary, #8884);
+    background: var(--color-background-secondary, ButtonFace);
+    color: var(--color-text-primary, ButtonText);
+    border-radius: var(--border-radius-sm, 4px);
+    cursor: pointer;
+    font-family: var(--font-sans, system-ui, sans-serif);
+}
+button:hover { filter: brightness(1.1); }
+button[hidden] { display: none; }
+.meta {
+    font-size: 12px;
+    opacity: 0.7;
+    margin-bottom: 4px;
+    color: var(--color-text-secondary, var(--color-text-primary, CanvasText));
+}
+.banner {
+    padding: 6px 10px;
+    margin-bottom: 8px;
+    border: 1px solid var(--color-border-primary, #8884);
+    border-radius: var(--border-radius-sm, 4px);
+    background: var(--color-background-secondary, #8881);
+    color: var(--color-text-primary, CanvasText);
+    font-size: 12px;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+.banner[hidden] { display: none; }
+.banner .label { font-weight: 600; opacity: 0.8; }
+.banner .sql {
+    font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+    font-size: 11px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+    opacity: 0.9;
+}
+.spinner {
+    width: 10px;
+    height: 10px;
+    border: 2px solid var(--color-border-primary, #8884);
+    border-top-color: var(--color-text-primary, CanvasText);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    flex-shrink: 0;
+}
+.spinner[hidden] { display: none; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.wrap {
+    overflow: visible;
+    border: 1px solid var(--color-border-primary, #8884);
+    border-radius: var(--border-radius-sm, 4px);
+    min-height: 120px;
+}
+table {
+    border-collapse: collapse;
+    width: 100%;
+    font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+    font-size: 12px;
+}
+th, td {
+    padding: 4px 8px;
+    border-bottom: 1px solid var(--color-border-primary, #8883);
+    text-align: left;
+    white-space: nowrap;
+}
+th {
+    position: sticky;
+    top: 0;
+    background: var(--color-background-primary, Canvas);
+    cursor: pointer;
+    user-select: none;
+}
+th.sorted::after { content: " \25B2"; }
+th.sorted.desc::after { content: " \25BC"; }
+tr:nth-child(even) td { background: var(--color-background-secondary, #8881); }
+tr.hidden { display: none; }
+.empty {
+    padding: 12px;
+    opacity: 0.7;
+    text-align: center;
+    color: var(--color-text-secondary, var(--color-text-primary, CanvasText));
+}
+[data-theme="dark"] { /* CSS vars handle colors; hook reserved for future overrides */ }
+</style>
+</head>
+<body>
+<header>
+    <input id="search" type="search" placeholder="Filter rows..." aria-label="Filter rows" />
+    <span id="count" class="meta"></span>
+    <button id="export" type="button">Export CSV</button>
+    <button id="toggle-display" type="button" hidden>Maximize</button>
+</header>
+<div id="banner" class="banner" hidden>
+    <span id="banner-spinner" class="spinner"></span>
+    <span id="banner-label" class="label">running</span>
+    <span id="banner-sql" class="sql"></span>
+</div>
+<div class="wrap">
+    <table id="grid">
+        <thead><tr id="head"></tr></thead>
+        <tbody id="body"></tbody>
+    </table>
+    <div id="empty" class="empty" hidden>No rows.</div>
+</div>
+<noscript>
+    <p>This view requires JavaScript. The results are also available in the tool's text output.</p>
+</noscript>
+<script>"use strict";(()=>{var ce=1,p=new Map,v=null,w=null,ae=!1,m=null,i,O=[],T=null,R,k=!1,E=null,I,M=!1,H=null,L=!1,S=null,B=!1;function D(e){let n=window.parent&&window.parent!==window?window.parent:null;if(!n)throw new Error("no parent frame");n.postMessage(e,"*")}function y(e,n,t=15e3){let o=ce++;return new Promise((s,r)=>{let u=setTimeout(()=>{p.delete(o)&&r(new Error(`request ${e} timed out`))},t);p.set(o,{resolve:f=>{clearTimeout(u),s(f)},reject:f=>{clearTimeout(u),r(f)}});try{D({jsonrpc:"2.0",id:o,method:e,params:n})}catch(f){p.delete(o),clearTimeout(u),r(f)}})}function A(e,n){D({jsonrpc:"2.0",method:e,params:n})}function fe(e){return typeof e=="object"&&e!==null&&e.jsonrpc==="2.0"}function N(){if(!i)return;let e=i;for(let n of O)try{n(e)}catch{}}function pe(e){!e||typeof e!="object"||(i={...i??{},...e})}function me(e){let n=e.data;if(fe(n)){if("id"in n&&n.id!==void 0&&!("method"in n)){let t=n,o=p.get(t.id);if(!o)return;p.delete(t.id),t.error?o.reject(new Error(t.error.message)):o.resolve(t.result);return}if("method"in n){let t=n;switch(t.method){case"ui/notifications/tool-result":{let o=t.params;if(!o)return;v?v(o):w=o;return}case"ui/notifications/host-context-changed":{pe(t.params),N();return}case"ui/notifications/tool-input":{T?T(t.params):(R=t.params,k=!0);return}case"ui/notifications/tool-input-partial":{E?E(t.params):(I=t.params,M=!0);return}case"ui/notifications/tool-cancelled":{H?H():L=!0;return}case"ui/resource-teardown":{S?S():B=!0;return}}}}}window.addEventListener("message",me);function Q(e=5e3){return m||(m=(async()=>{if(!window.parent||window.parent===window)throw new Error("not embedded in a host frame");let n=await y("ui/initialize",{protocolVersion:"2026-01-26",appInfo:{name:"mcp-database-query-app-ui",version:"0.1.0"},appCapabilities:{availableDisplayModes:["inline","fullscreen"]}},e);n&&typeof n=="object"&&n.hostContext?i=n.hostContext:i=i??{},A("ui/notifications/initialized",{}),ae=!0,N()})(),m)}function $(e){if(v=e,w){let n=w;w=null,e(n)}}function U(e,n){return y("tools/call",{name:e,arguments:n})}function W(){return i}function _(e){if(O.push(e),i)try{e(i)}catch{}}function F(e){if(!e)return;let n=e.styles?.variables;if(n)for(let[o,s]of Object.entries(n))document.documentElement.style.setProperty(o,s);e.theme&&(document.documentElement.dataset.theme=e.theme);let t=e.styles?.css?.fonts;if(t){let o="mcp-database-query-app-host-fonts";if(!document.getElementById(o)){let s=document.createElement("style");s.id=o,s.textContent=t,document.head.appendChild(s)}}}var b=null,g=null;function ge(e,n){g={width:e,height:n},b===null&&(b=setTimeout(()=>{if(b=null,g){let t=g;g=null;try{A("ui/notifications/size-changed",{width:t.width,height:t.height})}catch{}}},100))}function V(e){let n=e??document.body,t=()=>{let o=document.documentElement,s=Math.max(o.scrollWidth,n.scrollWidth),r=Math.max(o.scrollHeight,n.scrollHeight);ge(s,r)};if(t(),typeof ResizeObserver<"u"){let o=new ResizeObserver(()=>t());o.observe(n),o.observe(document.documentElement),new MutationObserver(()=>t()).observe(n,{childList:!0,subtree:!0,attributes:!0,characterData:!0})}else window.addEventListener("resize",t)}function Z(e){return y("ui/request-display-mode",{mode:e})}function G(e){return y("ui/update-model-context",{structuredContent:e})}function K(e){if(T=e,k){let n=R;k=!1,R=void 0,e(n)}}function X(e){if(E=e,M){let n=I;M=!1,I=void 0,e(n)}}function Y(e){H=e,L&&(L=!1,e())}function ee(e){S=e,B&&(B=!1,e())}var ne=document.getElementById("empty"),te=document.getElementById("head"),q=document.getElementById("body"),oe=document.getElementById("count"),se=document.getElementById("search"),we=document.getElementById("export"),h=document.getElementById("toggle-display"),P=document.getElementById("banner"),ye=document.getElementById("banner-label"),re=document.getElementById("banner-sql"),he=document.getElementById("banner-spinner"),a,l=null,C="inline",J=!0,c=null;function d(e,...n){for(let t of n)if(e[t]!==void 0)return e[t]}function Ce(e){if(!e||typeof e!="object")return;let n=e,t=d(n,"columns","Columns"),o=d(n,"rows","Rows");return!Array.isArray(t)||!Array.isArray(o)?void 0:{columns:t.map(r=>{let u=r;return{name:d(u,"name","Name")??"",dataType:d(u,"dataType","DataType")}}),rows:o,rowCount:d(n,"rowCount","RowCount")??o.length,truncated:d(n,"truncated","Truncated")??!1,executionMs:d(n,"executionMs","ExecutionMs")??0,resultSetId:d(n,"resultSetId","ResultSetId")??null,connectionId:d(n,"connectionId","ConnectionId")??null}}function xe(e){if(e.structuredContent!==void 0)return e.structuredContent;let n=e.content?.[0]?.text;if(typeof n=="string"&&n.length>0)try{return JSON.parse(n)}catch{return}}function x(e){if(te.innerHTML="",q.innerHTML="",!e||e.rows.length===0){ne.hidden=!1,oe.textContent=e?`${e.rowCount} rows \xB7 ${e.executionMs} ms`:"no data";return}ne.hidden=!0;for(let t=0;t<e.columns.length;t++){let o=document.createElement("th");o.textContent=e.columns[t].name,o.addEventListener("click",()=>{l?.index===t?l.descending=!l.descending:l={index:t,descending:!1},x(e)}),l?.index===t&&(o.classList.add("sorted"),l.descending&&o.classList.add("desc")),te.appendChild(o)}let n=l?[...e.rows].sort((t,o)=>{let s=t[l.index],r=o[l.index],u=s==null?r==null?0:-1:r==null?1:String(s).localeCompare(String(r),void 0,{numeric:!0});return l.descending?-u:u}):e.rows;for(let t of n){let o=document.createElement("tr");for(let s of t){let r=document.createElement("td");r.textContent=s==null?"NULL":String(s),o.appendChild(r)}q.appendChild(o)}oe.textContent=`${e.rowCount} rows${e.truncated?" \xB7 truncated":""} \xB7 ${e.executionMs} ms`,ie()}function ie(){let e=se.value.trim().toLowerCase();for(let n of Array.from(q.children)){let t=n.textContent?.toLowerCase()??"";n.classList.toggle("hidden",e.length>0&&!t.includes(e))}}function j(e,n,t){c&&(clearTimeout(c),c=null),ye.textContent=e,re.textContent=n??"",he.hidden=!t,P.hidden=!1}function le(e=0){c&&(clearTimeout(c),c=null),e>0?c=setTimeout(()=>{P.hidden=!0,c=null},e):P.hidden=!0}function ue(e){if(!e||typeof e!="object")return;let n=e,t=n.sql??n.Sql??n.query??n.Query;return typeof t=="string"?t:void 0}function z(){if(!J){h.hidden=!0;return}h.hidden=!1,h.textContent=C==="fullscreen"?"Minimize":"Maximize"}h.addEventListener("click",async()=>{let e=C==="fullscreen"?"inline":"fullscreen";try{await Z(e),C=e,z()}catch{J=!1,z()}});se.addEventListener("input",ie);we.addEventListener("click",async()=>{if(a)try{let e=await U("ui_results_export_csv",{columns:a.columns.map(o=>o.name),rows:a.rows}),n,t=e.structuredContent;if(t&&(n=t.csv??t.Csv),n||(n=e.content?.[0]?.text),typeof n=="string"&&n.length>0){let o=new Blob([n],{type:"text/csv"}),s=URL.createObjectURL(o),r=document.createElement("a");r.href=s,r.download="mcp-database-query-app-results.csv",r.click(),URL.revokeObjectURL(s)}}catch(e){console.warn("CSV export failed",e)}});$(e=>{let n=xe(e),t=Ce(n);t&&(a=t,x(a),le(),t.resultSetId&&G({lastQuery:{connectionId:t.connectionId??null,resultSetId:t.resultSetId,columns:t.columns.map(o=>o.name),rowCount:t.rowCount,truncated:t.truncated}}).catch(()=>{}))});X(e=>{let n=ue(e);j("running",n,!0)});K(e=>{let n=ue(e);j("running",n,!0)});Y(()=>{j("cancelled",re.textContent||void 0,!1),le(1500)});ee(()=>{});function de(e){F(e),(e?.displayMode==="inline"||e?.displayMode==="fullscreen"||e?.displayMode==="pip")&&(C=e.displayMode);let n=e?.availableDisplayModes;if(Array.isArray(n)&&n.length>0){let t=n.indexOf("fullscreen")!==-1,o=n.indexOf("inline")!==-1;J=t&&o}z(),a&&x(a)}_(e=>{de(e)});Q().then(()=>{de(W()),V()}).catch(()=>{a||x(void 0)});})();
+</script>
+</body>
+</html>

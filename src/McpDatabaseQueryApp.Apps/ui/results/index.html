@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>MCP Database Query App Results</title>
+<style>
+:root {
+    color-scheme: light dark;
+    font-family: var(--font-sans, system-ui, sans-serif);
+}
+body {
+    margin: 0;
+    padding: 12px;
+    background: var(--color-background-primary, Canvas);
+    color: var(--color-text-primary, CanvasText);
+    font-family: var(--font-sans, system-ui, sans-serif);
+}
+header { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+input[type="search"] {
+    flex: 1;
+    min-width: 180px;
+    padding: 4px 8px;
+    font-size: 14px;
+    border: 1px solid var(--color-border-primary, #8884);
+    border-radius: var(--border-radius-sm, 4px);
+    background: var(--color-background-primary, Field);
+    color: var(--color-text-primary, FieldText);
+    font-family: var(--font-sans, system-ui, sans-serif);
+}
+button {
+    padding: 4px 10px;
+    font-size: 13px;
+    border: 1px solid var(--color-border-primary, #8884);
+    background: var(--color-background-secondary, ButtonFace);
+    color: var(--color-text-primary, ButtonText);
+    border-radius: var(--border-radius-sm, 4px);
+    cursor: pointer;
+    font-family: var(--font-sans, system-ui, sans-serif);
+}
+button:hover { filter: brightness(1.1); }
+button[hidden] { display: none; }
+.meta {
+    font-size: 12px;
+    opacity: 0.7;
+    margin-bottom: 4px;
+    color: var(--color-text-secondary, var(--color-text-primary, CanvasText));
+}
+.banner {
+    padding: 6px 10px;
+    margin-bottom: 8px;
+    border: 1px solid var(--color-border-primary, #8884);
+    border-radius: var(--border-radius-sm, 4px);
+    background: var(--color-background-secondary, #8881);
+    color: var(--color-text-primary, CanvasText);
+    font-size: 12px;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+.banner[hidden] { display: none; }
+.banner .label { font-weight: 600; opacity: 0.8; }
+.banner .sql {
+    font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+    font-size: 11px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+    opacity: 0.9;
+}
+.spinner {
+    width: 10px;
+    height: 10px;
+    border: 2px solid var(--color-border-primary, #8884);
+    border-top-color: var(--color-text-primary, CanvasText);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    flex-shrink: 0;
+}
+.spinner[hidden] { display: none; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.wrap {
+    overflow: visible;
+    border: 1px solid var(--color-border-primary, #8884);
+    border-radius: var(--border-radius-sm, 4px);
+    min-height: 120px;
+}
+table {
+    border-collapse: collapse;
+    width: 100%;
+    font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+    font-size: 12px;
+}
+th, td {
+    padding: 4px 8px;
+    border-bottom: 1px solid var(--color-border-primary, #8883);
+    text-align: left;
+    white-space: nowrap;
+}
+th {
+    position: sticky;
+    top: 0;
+    background: var(--color-background-primary, Canvas);
+    cursor: pointer;
+    user-select: none;
+}
+th.sorted::after { content: " \25B2"; }
+th.sorted.desc::after { content: " \25BC"; }
+tr:nth-child(even) td { background: var(--color-background-secondary, #8881); }
+tr.hidden { display: none; }
+.empty {
+    padding: 12px;
+    opacity: 0.7;
+    text-align: center;
+    color: var(--color-text-secondary, var(--color-text-primary, CanvasText));
+}
+[data-theme="dark"] { /* CSS vars handle colors; hook reserved for future overrides */ }
+</style>
+</head>
+<body>
+<header>
+    <input id="search" type="search" placeholder="Filter rows..." aria-label="Filter rows" />
+    <span id="count" class="meta"></span>
+    <button id="export" type="button">Export CSV</button>
+    <button id="toggle-display" type="button" hidden>Maximize</button>
+</header>
+<div id="banner" class="banner" hidden>
+    <span id="banner-spinner" class="spinner"></span>
+    <span id="banner-label" class="label">running</span>
+    <span id="banner-sql" class="sql"></span>
+</div>
+<div class="wrap">
+    <table id="grid">
+        <thead><tr id="head"></tr></thead>
+        <tbody id="body"></tbody>
+    </table>
+    <div id="empty" class="empty" hidden>No rows.</div>
+</div>
+<noscript>
+    <p>This view requires JavaScript. The results are also available in the tool's text output.</p>
+</noscript>
+<!-- INLINE_SCRIPT -->
+</body>
+</html>

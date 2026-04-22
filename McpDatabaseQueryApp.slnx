@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/McpDatabaseQueryApp.Apps/McpDatabaseQueryApp.Apps.csproj" />
+    <Project Path="src/McpDatabaseQueryApp.Core/McpDatabaseQueryApp.Core.csproj" />
+    <Project Path="src/McpDatabaseQueryApp.Providers.Postgres/McpDatabaseQueryApp.Providers.Postgres.csproj" />
+    <Project Path="src/McpDatabaseQueryApp.Providers.SqlServer/McpDatabaseQueryApp.Providers.SqlServer.csproj" />
+    <Project Path="src/McpDatabaseQueryApp.Server/McpDatabaseQueryApp.Server.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/McpDatabaseQueryApp.Core.Tests/McpDatabaseQueryApp.Core.Tests.csproj" />
+    <Project Path="tests/McpDatabaseQueryApp.Providers.Postgres.Tests/McpDatabaseQueryApp.Providers.Postgres.Tests.csproj" />
+    <Project Path="tests/McpDatabaseQueryApp.Providers.SqlServer.Tests/McpDatabaseQueryApp.Providers.SqlServer.Tests.csproj" />
+    <Project Path="tests/McpDatabaseQueryApp.Server.IntegrationTests/McpDatabaseQueryApp.Server.IntegrationTests.csproj" />
+  </Folder>
+</Solution>
