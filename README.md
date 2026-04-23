@@ -41,7 +41,6 @@ use Option 2.
 | Windows x64           | [mcp-database-query-app-win-x64-jit.mcpb](https://github.com/Trojaner/mcp-database-query-app/releases/latest/download/mcp-database-query-app-win-x64-jit.mcpb)         |
 | Windows ARM64         | [mcp-database-query-app-win-arm64-jit.mcpb](https://github.com/Trojaner/mcp-database-query-app/releases/latest/download/mcp-database-query-app-win-arm64-jit.mcpb)     |
 | macOS (Apple Silicon) | [mcp-database-query-app-osx-arm64-jit.mcpb](https://github.com/Trojaner/mcp-database-query-app/releases/latest/download/mcp-database-query-app-osx-arm64-jit.mcpb)     |
-| macOS (Intel)         | [mcp-database-query-app-osx-x64-jit.mcpb](https://github.com/Trojaner/mcp-database-query-app/releases/latest/download/mcp-database-query-app-osx-x64-jit.mcpb)         |
 | Linux x64             | [mcp-database-query-app-linux-x64-jit.mcpb](https://github.com/Trojaner/mcp-database-query-app/releases/latest/download/mcp-database-query-app-linux-x64-jit.mcpb)     |
 | Linux ARM64           | [mcp-database-query-app-linux-arm64-jit.mcpb](https://github.com/Trojaner/mcp-database-query-app/releases/latest/download/mcp-database-query-app-linux-arm64-jit.mcpb) |
 
