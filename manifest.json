@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "mcp-database-query-app",
   "display_name": "MCP Database Query App",
-  "version": "0.1.9",
+  "version": "1.0.0",
   "description": "Database management MCP server for PostgreSQL, SQL Server etc. Provides tools for connecting, querying, schema introspection, script management, and interactive visualization.",
   "long_description": "MCP Database Query App is a full-featured MCP server for database operations. It supports PostgreSQL and SQL Server with features including parameterised queries, result pagination, execution plans, saved scripts, schema exploration, notes on database objects, and interactive UI components for data visualization.",
   "author": {
