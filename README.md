@@ -154,3 +154,6 @@ dotnet run --project src/McpDatabaseQueryApp.Server
 # HTTP/SSE
 McpDatabaseQueryApp__Transport__Http__Enabled=true dotnet run --project src/McpDatabaseQueryApp.Server
 ```
+
+# License
+[MIT](./LICENSE)
