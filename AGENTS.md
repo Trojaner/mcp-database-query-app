@@ -142,6 +142,10 @@ checked against this list before merging.
       production hardening). The ACL is read-only from MCP — only the
       REST API may mutate it; static entries from `appsettings.json`
       are immutable and survive restarts only via the config file.
+- [ ] Admin API is the only path that mutates ACL / isolation rules. MCP
+      must never expose these surfaces. The API is opt-in via
+      `McpDatabaseQueryApp:AdminApi:Enabled` and authenticated solely by
+      the static API key in `X-Admin-Api-Key`.
 
 ## 7. Result handling rules
 
