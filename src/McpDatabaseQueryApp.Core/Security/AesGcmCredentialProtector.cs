@@ -3,6 +3,22 @@ using System.Text;
 
 namespace McpDatabaseQueryApp.Core.Security;
 
+/// <summary>
+/// AES-256-GCM <see cref="ICredentialProtector"/> implementation. Encrypts
+/// short secrets (typically database passwords) at rest with an authenticated
+/// cipher and a fresh 96-bit nonce per call. The output blob is
+/// <c>ciphertext || tag</c>, with the nonce returned alongside it so callers
+/// can store the two as separate columns.
+/// </summary>
+/// <remarks>
+/// Supports two key sources:
+/// <list type="bullet">
+///   <item><description>An <see cref="IMasterKeyProvider"/> for the historical
+///   master-key-only mode (used when no profile system is present, e.g. tests).</description></item>
+///   <item><description>An explicit 32-byte key, supplied by callers that have
+///   already derived a per-profile key via <see cref="IProfileKeyProvider"/>.</description></item>
+/// </list>
+/// </remarks>
 public sealed class AesGcmCredentialProtector : ICredentialProtector, IDisposable
 {
     private const int NonceSize = 12;
@@ -10,6 +26,11 @@ public sealed class AesGcmCredentialProtector : ICredentialProtector, IDisposabl
 
     private readonly byte[] _key;
 
+    /// <summary>
+    /// Creates a protector keyed from the configured master key. Retained for
+    /// backwards compatibility with code paths that have not been migrated to
+    /// per-profile derivation.
+    /// </summary>
     public AesGcmCredentialProtector(IMasterKeyProvider keyProvider)
     {
         ArgumentNullException.ThrowIfNull(keyProvider);
@@ -20,6 +41,26 @@ public sealed class AesGcmCredentialProtector : ICredentialProtector, IDisposabl
         }
     }
 
+    /// <summary>
+    /// Creates a protector from an explicit 32-byte key. The caller transfers
+    /// ownership of <paramref name="key"/> to this instance, which zeroes it
+    /// on dispose.
+    /// </summary>
+    /// <param name="key">A 32-byte AES-256 key. The byte array is copied
+    /// internally so callers may zero their own buffer immediately after this call.</param>
+    public AesGcmCredentialProtector(byte[] key)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+        if (key.Length != 32)
+        {
+            throw new ArgumentException("AES-GCM key must be 32 bytes.", nameof(key));
+        }
+
+        _key = new byte[key.Length];
+        Buffer.BlockCopy(key, 0, _key, 0, key.Length);
+    }
+
+    /// <inheritdoc/>
     public (byte[] Cipher, byte[] Nonce) Encrypt(string plaintext)
     {
         ArgumentNullException.ThrowIfNull(plaintext);
@@ -37,6 +78,7 @@ public sealed class AesGcmCredentialProtector : ICredentialProtector, IDisposabl
         return (combined, nonce);
     }
 
+    /// <inheritdoc/>
     public string Decrypt(byte[] cipher, byte[] nonce)
     {
         ArgumentNullException.ThrowIfNull(cipher);
@@ -63,6 +105,7 @@ public sealed class AesGcmCredentialProtector : ICredentialProtector, IDisposabl
         return Encoding.UTF8.GetString(plain);
     }
 
+    /// <inheritdoc/>
     public void Dispose()
     {
         CryptographicOperations.ZeroMemory(_key);
