@@ -3,6 +3,7 @@ using McpDatabaseQueryApp.Core;
 using McpDatabaseQueryApp.Core.Configuration;
 using McpDatabaseQueryApp.Core.Connections;
 using McpDatabaseQueryApp.Core.Providers;
+using McpDatabaseQueryApp.Core.QueryExecution;
 using McpDatabaseQueryApp.Core.Scripts;
 using McpDatabaseQueryApp.Server.Elicitation;
 using McpDatabaseQueryApp.Server.Pagination;
@@ -19,6 +20,8 @@ public sealed class ScriptTools
     private readonly IConnectionRegistry _registry;
     private readonly IElicitationGateway _elicitation;
     private readonly MutationGuard _mutationGuard;
+    private readonly IQueryPipeline _pipeline;
+    private readonly IQueryClassifier _classifier;
     private readonly McpDatabaseQueryAppOptions _options;
     private readonly ILogger<ScriptTools> _logger;
 
@@ -27,6 +30,8 @@ public sealed class ScriptTools
         IConnectionRegistry registry,
         IElicitationGateway elicitation,
         MutationGuard mutationGuard,
+        IQueryPipeline pipeline,
+        IQueryClassifier classifier,
         McpDatabaseQueryAppOptions options,
         ILogger<ScriptTools> logger)
     {
@@ -34,6 +39,8 @@ public sealed class ScriptTools
         _registry = registry;
         _elicitation = elicitation;
         _mutationGuard = mutationGuard;
+        _pipeline = pipeline;
+        _classifier = classifier;
         _options = options;
         _logger = logger;
     }
@@ -169,49 +176,97 @@ public sealed class ScriptTools
             throw new InvalidOperationException($"Script '{script.Name}' targets {requiredProvider} but connection is {connection.Kind}.");
         }
 
-        var destructive = script.Destructive || ScriptSafetyAnalyzer.IsLikelyDestructive(script.SqlText);
-        if (destructive && !_mutationGuard.ShouldSkipElicitation(confirm))
+        // Classify against the AST so we know whether to dispatch the script
+        // through the read or write surface. The pipeline below performs the
+        // authoritative safety enforcement.
+        var classification = _classifier.Classify(connection.Kind, script.SqlText);
+        var mode = classification.ContainsMutation ? QueryExecutionMode.Write : QueryExecutionMode.Read;
+
+        var pipelineContext = new QueryExecutionContext(
+            script.SqlText,
+            parameters: null,
+            connection,
+            mode,
+            confirmDestructive: confirm,
+            confirmUnlimited: false);
+        pipelineContext.Items[McpDestructiveOperationConfirmer.ContextKey] = server;
+
+        try
         {
-            var message = $"The following SQL will be executed:\n\n{script.SqlText}\n\nProceed?";
-            var ok = await _elicitation.ConfirmAsync(server, message, cancellationToken).ConfigureAwait(false);
-            if (!ok)
-            {
-                return new ScriptRunResult(script.Name, connectionId, Executed: false, RowsAffected: 0, RowCount: 0);
-            }
+            await _pipeline.ExecuteAsync(pipelineContext, cancellationToken).ConfigureAwait(false);
+        }
+        catch (DestructiveOperationCancelledException)
+        {
+            return new ScriptRunResult(script.Name, connectionId, Executed: false, RowsAffected: 0, RowCount: 0);
         }
 
-        if (ScriptSafetyAnalyzer.IsReadOnly(script.SqlText))
+        if (mode == QueryExecutionMode.Read)
         {
             var query = await connection.ExecuteQueryAsync(
-                new QueryRequest(script.SqlText, null, null, null),
+                new QueryRequest(pipelineContext.Sql, null, null, null),
                 cancellationToken).ConfigureAwait(false);
             return new ScriptRunResult(script.Name, connectionId, Executed: true, RowsAffected: 0, RowCount: query.RowCount);
         }
 
-        if (connection.IsReadOnly)
-        {
-            throw new InvalidOperationException("Connection is read-only. Script contains writes.");
-        }
-
         var affected = await connection.ExecuteNonQueryAsync(
-            new NonQueryRequest(script.SqlText, null, null),
+            new NonQueryRequest(pipelineContext.Sql, null, null),
             cancellationToken).ConfigureAwait(false);
         return new ScriptRunResult(script.Name, connectionId, Executed: true, RowsAffected: affected, RowCount: 0);
         }, _logger).ConfigureAwait(false);
     }
 
-    private static ScriptRecord Build(ScriptArgs args)
+    private ScriptRecord Build(ScriptArgs args)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(args.Name);
         ArgumentException.ThrowIfNullOrWhiteSpace(args.SqlText);
+
+        var providerKind = args.Provider is null ? null : (DatabaseKind?)Enum.Parse<DatabaseKind>(args.Provider, ignoreCase: true);
+        bool destructive;
+        if (args.Destructive is { } explicitFlag)
+        {
+            destructive = explicitFlag;
+        }
+        else
+        {
+            // When the script doesn't declare a provider, classify against
+            // every registered dialect and OR the verdicts so the most
+            // restrictive parser wins. This keeps the legacy behaviour where
+            // a "DROP TABLE …" stored without a provider hint is still
+            // recognised as destructive at create-time.
+            var kindsToProbe = providerKind is { } pk
+                ? new[] { pk }
+                : Enum.GetValues<DatabaseKind>();
+
+            destructive = false;
+            foreach (var kind in kindsToProbe)
+            {
+                try
+                {
+                    if (_classifier.Classify(kind, args.SqlText).ContainsDestructive)
+                    {
+                        destructive = true;
+                        break;
+                    }
+                }
+                catch (QuerySyntaxException)
+                {
+                    // This dialect can't parse it — try the next one.
+                }
+                catch (InvalidOperationException)
+                {
+                    // No parser registered for this dialect; ignore.
+                }
+            }
+        }
+
         return new ScriptRecord
         {
             Id = ConnectionIdFactory.NewScriptId(),
             Name = args.Name,
             Description = args.Description,
-            Provider = args.Provider is null ? null : Enum.Parse<DatabaseKind>(args.Provider, ignoreCase: true),
+            Provider = providerKind,
             SqlText = args.SqlText,
-            Destructive = args.Destructive ?? ScriptSafetyAnalyzer.IsLikelyDestructive(args.SqlText),
+            Destructive = destructive,
             Tags = args.Tags ?? [],
             Notes = args.Notes,
             Parameters = args.Parameters ?? [],

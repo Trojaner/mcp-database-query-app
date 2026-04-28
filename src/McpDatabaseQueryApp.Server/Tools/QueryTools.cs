@@ -3,8 +3,8 @@ using System.Text;
 using McpDatabaseQueryApp.Core.Configuration;
 using McpDatabaseQueryApp.Core.Connections;
 using McpDatabaseQueryApp.Core.Providers;
+using McpDatabaseQueryApp.Core.QueryExecution;
 using McpDatabaseQueryApp.Core.Results;
-using McpDatabaseQueryApp.Core.Scripts;
 using McpDatabaseQueryApp.Server.Elicitation;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
@@ -18,7 +18,7 @@ public sealed class QueryTools
     private readonly IResultLimiter _limiter;
     private readonly IResultSetCache _cache;
     private readonly IElicitationGateway _elicitation;
-    private readonly MutationGuard _mutationGuard;
+    private readonly IQueryPipeline _pipeline;
     private readonly McpDatabaseQueryAppOptions _options;
     private readonly ILogger<QueryTools> _logger;
 
@@ -27,7 +27,7 @@ public sealed class QueryTools
         IResultLimiter limiter,
         IResultSetCache cache,
         IElicitationGateway elicitation,
-        MutationGuard mutationGuard,
+        IQueryPipeline pipeline,
         McpDatabaseQueryAppOptions options,
         ILogger<QueryTools> logger)
     {
@@ -35,7 +35,7 @@ public sealed class QueryTools
         _limiter = limiter;
         _cache = cache;
         _elicitation = elicitation;
-        _mutationGuard = mutationGuard;
+        _pipeline = pipeline;
         _options = options;
         _logger = logger;
     }
@@ -79,10 +79,20 @@ public sealed class QueryTools
             effectiveLimit = _limiter.Resolve(args.Limit, confirmedUnlimited: true);
         }
 
-        // Request one extra row so we can detect truncation even if the caller asked for exactly `effectiveLimit`.
-        var request = new QueryRequest(
+        var pipelineContext = new QueryExecutionContext(
             args.Sql,
             args.Parameters,
+            connection,
+            QueryExecutionMode.Read,
+            confirmDestructive: false,
+            confirmUnlimited: args.ConfirmUnlimited);
+        pipelineContext.Items[McpDestructiveOperationConfirmer.ContextKey] = server;
+        await _pipeline.ExecuteAsync(pipelineContext, cancellationToken).ConfigureAwait(false);
+
+        // Request one extra row so we can detect truncation even if the caller asked for exactly `effectiveLimit`.
+        var request = new QueryRequest(
+            pipelineContext.Sql,
+            pipelineContext.Parameters,
             effectiveLimit == int.MaxValue ? null : effectiveLimit + 1,
             args.TimeoutSeconds);
 
@@ -163,31 +173,42 @@ public sealed class QueryTools
             }
         }
 
-        if (connection.IsReadOnly)
-        {
-            throw new InvalidOperationException("Connection is read-only. Change its ReadOnly flag to execute writes.");
-        }
+        var pipelineContext = new QueryExecutionContext(
+            args.Sql,
+            args.Parameters,
+            connection,
+            QueryExecutionMode.Write,
+            confirmDestructive: args.Confirm,
+            confirmUnlimited: false);
+        pipelineContext.Items[McpDestructiveOperationConfirmer.ContextKey] = server;
 
-        if (ScriptSafetyAnalyzer.IsLikelyDestructive(args.Sql) && !args.Confirm && _elicitation.ClientSupportsForm(server))
+        try
         {
-            var message = $"The following SQL will be executed:\n\n{args.Sql}\n\nProceed?";
-            var ok = await _elicitation.ConfirmAsync(server, message, cancellationToken).ConfigureAwait(false);
-            if (!ok)
-            {
-                return new ExecuteResult(args.ConnectionId, RowsAffected: 0, Executed: false);
-            }
+            await _pipeline.ExecuteAsync(pipelineContext, cancellationToken).ConfigureAwait(false);
+        }
+        catch (DestructiveOperationCancelledException)
+        {
+            return new ExecuteResult(args.ConnectionId, RowsAffected: 0, Executed: false);
         }
 
         var affected = await connection.ExecuteNonQueryAsync(
-            new NonQueryRequest(args.Sql, args.Parameters, args.TimeoutSeconds),
+            new NonQueryRequest(pipelineContext.Sql, pipelineContext.Parameters, args.TimeoutSeconds),
             cancellationToken).ConfigureAwait(false);
         return new ExecuteResult(args.ConnectionId, affected, Executed: true);
         }, _logger).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Returns the provider's execution plan for the supplied SQL. The
+    /// pipeline runs in <see cref="QueryExecutionMode.Explain"/> so the
+    /// statement is parsed and validated against read-only invariants but
+    /// destructive-statement confirmation is skipped — most engines accept
+    /// <c>EXPLAIN</c> over any DML without performing the side effect.
+    /// </summary>
     [McpServerTool(Name = "db_explain", ReadOnly = true)]
     [Description("Returns the provider's execution plan for the supplied SQL.")]
     public async Task<ExplainToolResult> ExplainAsync(
+        McpServer server,
         ExplainArgs args,
         CancellationToken cancellationToken)
     {
@@ -206,7 +227,17 @@ public sealed class QueryTools
             }
         }
 
-        var plan = await connection.ExplainAsync(args.Sql, args.Parameters, cancellationToken).ConfigureAwait(false);
+        var pipelineContext = new QueryExecutionContext(
+            args.Sql,
+            args.Parameters,
+            connection,
+            QueryExecutionMode.Explain,
+            confirmDestructive: false,
+            confirmUnlimited: false);
+        pipelineContext.Items[McpDestructiveOperationConfirmer.ContextKey] = server;
+        await _pipeline.ExecuteAsync(pipelineContext, cancellationToken).ConfigureAwait(false);
+
+        var plan = await connection.ExplainAsync(pipelineContext.Sql, pipelineContext.Parameters, cancellationToken).ConfigureAwait(false);
         return new ExplainToolResult(args.ConnectionId, plan.Format, plan.Plan);
         }, _logger).ConfigureAwait(false);
     }
