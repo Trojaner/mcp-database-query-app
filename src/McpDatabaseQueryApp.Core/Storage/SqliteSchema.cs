@@ -7,7 +7,7 @@ namespace McpDatabaseQueryApp.Core.Storage;
 
 public static class SqliteSchema
 {
-    public const int CurrentVersion = 4;
+    public const int CurrentVersion = 5;
 
     public static async Task EnsureCreatedAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
@@ -46,6 +46,12 @@ public static class SqliteSchema
         {
             await ApplyV4Async(connection, cancellationToken).ConfigureAwait(false);
             await StampAsync(connection, 4, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (version < 5)
+        {
+            await ApplyV5Async(connection, cancellationToken).ConfigureAwait(false);
+            await StampAsync(connection, 5, cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -258,5 +264,39 @@ public static class SqliteSchema
                 status = ProfileStatus.Active.ToString(),
             },
             cancellationToken: cancellationToken)).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// v5: introduces the <c>acl_entries</c> table. Each row binds a profile
+    /// to an operation set on a hierarchical object scope (host/port/db/
+    /// schema/table/column, nullable fields = wildcards) with an Allow/Deny
+    /// effect and a priority ordering. Ownership cascades from
+    /// <c>profiles</c> so deleting a profile removes its ACL.
+    /// </summary>
+    private static async Task ApplyV5Async(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        const string ddl = """
+            CREATE TABLE IF NOT EXISTS acl_entries (
+                id                  TEXT NOT NULL PRIMARY KEY,
+                profile_id          TEXT NOT NULL,
+                subject_kind        TEXT NOT NULL,
+                host                TEXT NULL,
+                port                INTEGER NULL,
+                database_name       TEXT NULL,
+                schema_name         TEXT NULL,
+                table_name          TEXT NULL,
+                column_name         TEXT NULL,
+                allowed_operations  INTEGER NOT NULL,
+                effect              TEXT NOT NULL,
+                priority            INTEGER NOT NULL DEFAULT 0,
+                description         TEXT NULL,
+                created_at          TEXT NOT NULL,
+                updated_at          TEXT NOT NULL,
+                FOREIGN KEY (profile_id) REFERENCES profiles(profile_id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_acl_entries_profile ON acl_entries(profile_id, priority DESC);
+            """;
+
+        await connection.ExecuteAsync(new CommandDefinition(ddl, cancellationToken: cancellationToken)).ConfigureAwait(false);
     }
 }

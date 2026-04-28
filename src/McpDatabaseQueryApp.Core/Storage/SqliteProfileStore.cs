@@ -150,6 +150,11 @@ public sealed class SqliteProfileStore : IProfileStore
             new { id = id.Value },
             transaction: tx,
             cancellationToken: cancellationToken)).ConfigureAwait(false);
+        await connection.ExecuteAsync(new CommandDefinition(
+            "DELETE FROM acl_entries  WHERE profile_id = @id;",
+            new { id = id.Value },
+            transaction: tx,
+            cancellationToken: cancellationToken)).ConfigureAwait(false);
         var rows = await connection.ExecuteAsync(new CommandDefinition(
             "DELETE FROM profiles WHERE profile_id = @id;",
             new { id = id.Value },
