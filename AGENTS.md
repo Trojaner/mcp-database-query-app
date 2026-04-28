@@ -135,6 +135,13 @@ checked against this list before merging.
 - [ ] URL-mode elicitation URLs never contain user secrets, PII, or
       pre-authenticated tokens. Form-mode elicitation never requests a
       password, API key, or similar (the spec forbids it).
+- [ ] ACL changes preserve the default-deny semantics for non-default
+      profiles. The default profile follows
+      `McpDatabaseQueryApp:Authorization:DefaultProfilePolicy`
+      (`AllowAll` by default for backwards compat; `DenyAll` for
+      production hardening). The ACL is read-only from MCP — only the
+      REST API may mutate it; static entries from `appsettings.json`
+      are immutable and survive restarts only via the config file.
 
 ## 7. Result handling rules
 
