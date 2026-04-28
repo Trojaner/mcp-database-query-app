@@ -1,6 +1,7 @@
 using McpDatabaseQueryApp.Core;
 using McpDatabaseQueryApp.Core.Configuration;
 using McpDatabaseQueryApp.Core.Connections;
+using McpDatabaseQueryApp.Core.Profiles;
 using McpDatabaseQueryApp.Core.Providers;
 using McpDatabaseQueryApp.Core.Results;
 using McpDatabaseQueryApp.Core.Scripts;
@@ -20,7 +21,7 @@ public sealed class SqliteMetadataStoreTests : IAsyncLifetime
         _tempDir = Path.Combine(Path.GetTempPath(), "mcp-database-query-app-tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(_tempDir);
         var options = new McpDatabaseQueryAppOptions { MetadataDbPath = Path.Combine(_tempDir, "meta.db") };
-        _store = new SqliteMetadataStore(options);
+        _store = new SqliteMetadataStore(options, new ProfileContextAccessor());
     }
 
     public async Task InitializeAsync()

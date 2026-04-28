@@ -2,7 +2,10 @@ using System.IO.Pipelines;
 using McpDatabaseQueryApp.Apps;
 using McpDatabaseQueryApp.Core.Configuration;
 using McpDatabaseQueryApp.Core.DependencyInjection;
+using McpDatabaseQueryApp.Core.Profiles;
 using McpDatabaseQueryApp.Core.Storage;
+using McpDatabaseQueryApp.Server.DependencyInjection;
+using McpDatabaseQueryApp.Server.IntegrationTests.Profiles;
 using McpDatabaseQueryApp.Providers.Postgres;
 using McpDatabaseQueryApp.Providers.SqlServer;
 using McpDatabaseQueryApp.Server.Completions;
@@ -14,32 +17,98 @@ using McpDatabaseQueryApp.Server.Resources;
 using McpDatabaseQueryApp.Server.Tools;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
 
 namespace McpDatabaseQueryApp.Server.IntegrationTests;
 
+/// <summary>
+/// In-process MCP harness used by the integration test suite. Wires a
+/// production-shaped service graph onto a paired <see cref="Pipe"/> transport
+/// so an <see cref="McpClient"/> can drive the server end-to-end without
+/// process boundaries.
+/// </summary>
+/// <remarks>
+/// <para>
+/// The harness installs two test seams in place of their production
+/// counterparts:
+/// </para>
+/// <list type="bullet">
+///   <item><description><see cref="TestProfileContextAccessor"/> — replaces the
+///   <see cref="AsyncLocal{T}"/>-backed accessor with a volatile field so the
+///   profile can be switched from the test thread and still be visible to the
+///   server's already-scheduled <c>RunAsync</c> continuations.</description></item>
+///   <item><description><see cref="TestProfileResolver"/> — replaces the OAuth2
+///   resolver chain with a deterministic "use this profile" resolver. The HTTP
+///   transport's <c>ProfileResolutionMiddleware</c> still calls into it per
+///   request; the in-process stream transport doesn't run middleware, hence
+///   the volatile-field accessor above.</description></item>
+/// </list>
+/// </remarks>
 public sealed class InProcessServerHarness : IAsyncDisposable
 {
     private readonly string _tempDir;
     private readonly ServiceProvider _services;
     private readonly Task _serverTask;
     private readonly CancellationTokenSource _cts = new();
+    private readonly TestProfileContextAccessor _accessor;
+    private readonly TestProfileResolver _resolver;
 
     private InProcessServerHarness(
         string tempDir,
         ServiceProvider services,
         McpClient client,
-        Task serverTask)
+        Task serverTask,
+        TestProfileContextAccessor accessor,
+        TestProfileResolver resolver)
     {
         _tempDir = tempDir;
         _services = services;
         Client = client;
         _serverTask = serverTask;
+        _accessor = accessor;
+        _resolver = resolver;
     }
 
+    /// <summary>
+    /// The MCP client wired to the in-process server.
+    /// </summary>
     public McpClient Client { get; }
+
+    /// <summary>
+    /// The DI container backing the in-process server. Tests use this to
+    /// reach into stores (e.g. <see cref="IProfileStore"/>) for setup.
+    /// </summary>
+    public IServiceProvider Services => _services;
+
+    /// <summary>
+    /// Switches the ambient profile that subsequent
+    /// <see cref="McpClient.CallToolAsync"/> invocations execute under.
+    /// Provisions the profile in the store on first use.
+    /// </summary>
+    public async Task UseProfileAsync(ProfileId profileId, string? subject = null, CancellationToken cancellationToken = default)
+    {
+        var store = _services.GetRequiredService<IProfileStore>();
+        var profile = await store.GetAsync(profileId, cancellationToken).ConfigureAwait(false);
+        if (profile is null)
+        {
+            profile = new Profile(
+                profileId,
+                Name: subject ?? profileId.Value,
+                Subject: subject ?? profileId.Value,
+                Issuer: null,
+                CreatedAt: DateTimeOffset.UtcNow,
+                Status: ProfileStatus.Active,
+                Metadata: new Dictionary<string, string>(StringComparer.Ordinal));
+            profile = await store.UpsertAsync(profile, cancellationToken).ConfigureAwait(false);
+        }
+
+        _accessor.Set(profile);
+        _resolver.Set(profile);
+    }
 
     public static async Task<InProcessServerHarness> StartAsync(
         Dictionary<string, string?>? configOverrides = null,
@@ -56,6 +125,7 @@ public sealed class InProcessServerHarness : IAsyncDisposable
             ["McpDatabaseQueryApp:Secrets:KeyRef"] = "Literal:mcp-database-query-app-int-key-32bytes",
             ["McpDatabaseQueryApp:DefaultResultLimit"] = "100",
             ["McpDatabaseQueryApp:MaxResultLimit"] = "1000",
+            ["McpDatabaseQueryApp:DangerouslySkipPermissions"] = "true",
         };
         if (configOverrides is not null)
         {
@@ -73,12 +143,23 @@ public sealed class InProcessServerHarness : IAsyncDisposable
         services.AddSingleton<IConfiguration>(configuration);
         services.AddLogging();
         services.AddMcpDatabaseQueryAppCore(configuration);
+        services.AddProfiles();
+
+        // Test seams: replace the AsyncLocal accessor with a volatile-field
+        // accessor and the OAuth2 composite resolver with a deterministic
+        // single-profile resolver. Both are settable per-test via UseProfile.
+        var accessor = new TestProfileContextAccessor();
+        services.RemoveAll<IProfileContextAccessor>();
+        services.AddSingleton<IProfileContextAccessor>(accessor);
+
         services.AddPostgresProvider();
         services.AddSqlServerProvider();
         services.AddSingleton<MetadataCache>();
         services.AddSingleton<IElicitationGateway, ElicitationGateway>();
         services.AddSingleton<CompletionRouter>();
         services.AddSingleton<McpLoggingBridge>();
+        services.AddSingleton<MutationGuard>();
+        services.AddSingleton<ScriptPromptProvider>();
 
         var clientToServer = new Pipe();
         var serverToClient = new Pipe();
@@ -94,6 +175,7 @@ public sealed class InProcessServerHarness : IAsyncDisposable
            .WithTools<SchemaTools>()
            .WithTools<ScriptTools>()
            .WithTools<UiTools>()
+           .WithTools<NoteTools>()
            .WithPrompts<McpDatabaseQueryAppPrompts>()
            .WithResources<McpDatabaseQueryAppResources>()
            .WithResources<AppResources>()
@@ -103,6 +185,13 @@ public sealed class InProcessServerHarness : IAsyncDisposable
 
         var provider = services.BuildServiceProvider();
         await provider.GetRequiredService<IMetadataStore>().InitializeAsync(cancellationToken);
+        var profileStore = provider.GetRequiredService<IProfileStore>();
+        await profileStore.EnsureDefaultAsync(cancellationToken);
+
+        var defaultProfile = await profileStore.GetAsync(ProfileId.Default, cancellationToken)
+            ?? throw new InvalidOperationException("Default profile missing.");
+        accessor.Set(defaultProfile);
+        var resolver = new TestProfileResolver(defaultProfile);
 
         var server = provider.GetRequiredService<ModelContextProtocol.Server.McpServer>();
         var runTask = server.RunAsync(CancellationToken.None);
@@ -125,7 +214,7 @@ public sealed class InProcessServerHarness : IAsyncDisposable
             NullLoggerFactory.Instance,
             cancellationToken);
 
-        return new InProcessServerHarness(tempDir, provider, client, runTask);
+        return new InProcessServerHarness(tempDir, provider, client, runTask, accessor, resolver);
     }
 
     public async ValueTask DisposeAsync()

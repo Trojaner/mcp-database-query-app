@@ -1,4 +1,5 @@
 using McpDatabaseQueryApp.Core.Configuration;
+using McpDatabaseQueryApp.Core.Profiles;
 using McpDatabaseQueryApp.Core.Providers;
 using McpDatabaseQueryApp.Core.Results;
 using McpDatabaseQueryApp.Core.Storage;
@@ -22,7 +23,7 @@ public sealed class FileResultSetCacheTests : IAsyncLifetime
             MetadataDbPath = Path.Combine(_tempDir, "meta.db"),
             ResultSetTtl = TimeSpan.FromMinutes(10),
         };
-        _store = new SqliteMetadataStore(options);
+        _store = new SqliteMetadataStore(options, new ProfileContextAccessor());
         _cache = new FileResultSetCache(options, _store);
     }
 

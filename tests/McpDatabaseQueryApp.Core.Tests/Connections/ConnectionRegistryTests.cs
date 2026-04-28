@@ -1,6 +1,7 @@
 using McpDatabaseQueryApp.Core;
 using McpDatabaseQueryApp.Core.Connections;
 using McpDatabaseQueryApp.Core.Notes;
+using McpDatabaseQueryApp.Core.Profiles;
 using McpDatabaseQueryApp.Core.Providers;
 using McpDatabaseQueryApp.Core.Results;
 using McpDatabaseQueryApp.Core.Security;
@@ -19,7 +20,7 @@ public sealed class ConnectionRegistryTests
     public async Task Open_adds_connection_and_returns_id()
     {
         var provider = new FakeProvider();
-        var registry = new ConnectionRegistry(new ProviderRegistry([provider]), new FakeMetadata(), new FakeProtector(), new ConnectionActivityTracker());
+        var registry = new ConnectionRegistry(new ProviderRegistry([provider]), new FakeMetadata(), new FakeProtector(), new ConnectionActivityTracker(), new ProfileContextAccessor());
 
         var descriptor = SampleDescriptor();
         var conn = await registry.OpenAsync(descriptor, "pw", CancellationToken.None);
@@ -32,7 +33,7 @@ public sealed class ConnectionRegistryTests
     [Fact]
     public async Task Disconnect_removes_connection()
     {
-        var registry = new ConnectionRegistry(new ProviderRegistry([new FakeProvider()]), new FakeMetadata(), new FakeProtector(), new ConnectionActivityTracker());
+        var registry = new ConnectionRegistry(new ProviderRegistry([new FakeProvider()]), new FakeMetadata(), new FakeProtector(), new ConnectionActivityTracker(), new ProfileContextAccessor());
         var conn = await registry.OpenAsync(SampleDescriptor(), "pw", CancellationToken.None);
 
         var removed = await registry.DisconnectAsync(conn.Id);
@@ -44,7 +45,7 @@ public sealed class ConnectionRegistryTests
     [Fact]
     public async Task DisconnectAll_closes_every_connection()
     {
-        var registry = new ConnectionRegistry(new ProviderRegistry([new FakeProvider()]), new FakeMetadata(), new FakeProtector(), new ConnectionActivityTracker());
+        var registry = new ConnectionRegistry(new ProviderRegistry([new FakeProvider()]), new FakeMetadata(), new FakeProtector(), new ConnectionActivityTracker(), new ProfileContextAccessor());
         await registry.OpenAsync(SampleDescriptor() with { Name = "one" }, "pw", CancellationToken.None);
         await registry.OpenAsync(SampleDescriptor() with { Name = "two" }, "pw", CancellationToken.None);
 
@@ -56,7 +57,7 @@ public sealed class ConnectionRegistryTests
     [Fact]
     public async Task OpenPredefined_throws_for_unknown()
     {
-        var registry = new ConnectionRegistry(new ProviderRegistry([new FakeProvider()]), new FakeMetadata(), new FakeProtector(), new ConnectionActivityTracker());
+        var registry = new ConnectionRegistry(new ProviderRegistry([new FakeProvider()]), new FakeMetadata(), new FakeProtector(), new ConnectionActivityTracker(), new ProfileContextAccessor());
         Func<Task> act = async () => await registry.OpenPredefinedAsync("nope", CancellationToken.None);
         await act.Should().ThrowAsync<KeyNotFoundException>();
     }
