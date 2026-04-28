@@ -37,6 +37,13 @@ public static class AdminApiServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(configuration);
 
         services.AddOptions<AdminApiOptions>()
+            .Configure(o =>
+            {
+                // Clear defaults before binding so configured collections fully
+                // replace rather than append to the static defaults declared on
+                // AdminApiOptions itself.
+                o.AllowedHosts = new List<string>();
+            })
             .Bind(configuration.GetSection(AdminApiOptions.SectionName));
         services.TryAddSingleton(sp =>
             sp.GetRequiredService<Options.IOptions<AdminApiOptions>>().Value);
@@ -50,6 +57,7 @@ public static class AdminApiServiceCollectionExtensions
 
         services.TryAddSingleton<IAdminApiKeyProvider, AdminApiKeyProvider>();
         services.AddProblemDetails();
+        services.AddOpenApi("admin-v1");
 
         services.AddAuthentication(AdminApiKeyAuthenticationHandler.SchemeName)
             .AddScheme<AdminApiKeyAuthenticationOptions, AdminApiKeyAuthenticationHandler>(

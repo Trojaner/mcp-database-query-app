@@ -86,7 +86,10 @@ static async Task RunWebAsync(string[] args, McpDatabaseQueryAppOptions options)
     var app = builder.Build();
     await InitializeStoreAsync(app.Services).ConfigureAwait(false);
 
-    if (!string.IsNullOrWhiteSpace(options.OAuth2.Authority))
+    var adminApiOptions = app.Services.GetRequiredService<McpDatabaseQueryApp.Server.AdminApi.AdminApiOptions>();
+    var hasOAuth = !string.IsNullOrWhiteSpace(options.OAuth2.Authority);
+
+    if (hasOAuth || adminApiOptions.Enabled)
     {
         app.UseAuthentication();
         app.UseAuthorization();
@@ -94,6 +97,10 @@ static async Task RunWebAsync(string[] args, McpDatabaseQueryAppOptions options)
 
     app.UseProfileResolution();
     app.MapMcp();
+    if (adminApiOptions.Enabled)
+    {
+        app.MapAdminApi();
+    }
     await app.RunAsync().ConfigureAwait(false);
 }
 
@@ -116,6 +123,10 @@ static void ConfigureServices(IServiceCollection services, IConfiguration config
     services.AddQueryExecutionPipeline();
     services.AddAclAuthorization(configuration);
     services.AddDataIsolation(configuration);
+    if (includeHttp)
+    {
+        services.AddAdminApi(configuration);
+    }
     services.AddHostedService<IsolationRuleBootstrap>();
     services.AddMcpDestructiveOperationConfirmer();
     services.AddSingleton<MetadataCache>();
