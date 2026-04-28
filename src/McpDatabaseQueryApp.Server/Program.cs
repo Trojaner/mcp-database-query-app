@@ -1,4 +1,5 @@
 using McpDatabaseQueryApp.Apps;
+using McpDatabaseQueryApp.Core.Authorization;
 using McpDatabaseQueryApp.Core.Configuration;
 using McpDatabaseQueryApp.Core.DependencyInjection;
 using McpDatabaseQueryApp.Core.Profiles;
@@ -122,6 +123,12 @@ static void ConfigureServices(IServiceCollection services, IConfiguration config
     services.AddSingleton<MutationGuard>();
     services.AddHostedService<ResultSetJanitor>();
     services.AddHostedService<ConnectionReaper>();
+
+    // ACL static-entry bootstrap: register once as the hosted service AND as
+    // the IAclStaticEntrySource so the same instance feeds the evaluator.
+    services.AddSingleton<AclBootstrapHostedService>();
+    services.AddSingleton<IAclStaticEntrySource>(sp => sp.GetRequiredService<AclBootstrapHostedService>());
+    services.AddHostedService(sp => sp.GetRequiredService<AclBootstrapHostedService>());
 
     // Per the MCP SDK docs, the correct way to make tool schema generation see
     // user DTOs is to pass a preconfigured JsonSerializerOptions into each
