@@ -19,4 +19,12 @@ public interface IIsolationRuleEngine
     Task<IReadOnlyList<RewriteDirective>> BuildDirectivesAsync(
         QueryExecutionContext context,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Drops any cached rule snapshots so subsequent
+    /// <see cref="BuildDirectivesAsync"/> calls re-read the underlying store.
+    /// Called by the admin REST API after a rule mutation. The default
+    /// implementation is a no-op.
+    /// </summary>
+    void InvalidateAll() { }
 }
