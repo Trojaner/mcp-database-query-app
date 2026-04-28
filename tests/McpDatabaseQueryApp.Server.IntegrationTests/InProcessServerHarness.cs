@@ -154,6 +154,8 @@ public sealed class InProcessServerHarness : IAsyncDisposable
 
         services.AddPostgresProvider();
         services.AddSqlServerProvider();
+        services.AddQueryExecutionPipeline();
+        services.AddMcpDestructiveOperationConfirmer();
         services.AddSingleton<MetadataCache>();
         services.AddSingleton<IElicitationGateway, ElicitationGateway>();
         services.AddSingleton<CompletionRouter>();
