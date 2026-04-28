@@ -1,10 +1,12 @@
 using McpDatabaseQueryApp.Apps;
 using McpDatabaseQueryApp.Core.Configuration;
 using McpDatabaseQueryApp.Core.DependencyInjection;
+using McpDatabaseQueryApp.Core.Profiles;
 using McpDatabaseQueryApp.Core.Storage;
 using McpDatabaseQueryApp.Providers.Postgres;
 using McpDatabaseQueryApp.Providers.SqlServer;
 using McpDatabaseQueryApp.Server.Completions;
+using McpDatabaseQueryApp.Server.DependencyInjection;
 using McpDatabaseQueryApp.Server.Elicitation;
 using McpDatabaseQueryApp.Server.Hosting;
 using McpDatabaseQueryApp.Server.Logging;
@@ -51,6 +53,12 @@ static async Task RunStdioAsync(string[] args, McpDatabaseQueryAppOptions option
 
     var host = builder.Build();
     await InitializeStoreAsync(host.Services).ConfigureAwait(false);
+
+    // Stdio has no client identity. Open the default profile scope for the
+    // process lifetime so every tool invocation sees a non-null ambient
+    // profile via IProfileContextAccessor.
+    using var stdioScope = await OpenDefaultProfileScopeAsync(host.Services).ConfigureAwait(false);
+
     try
     {
         await host.RunAsync().ConfigureAwait(false);
@@ -75,6 +83,14 @@ static async Task RunWebAsync(string[] args, McpDatabaseQueryAppOptions options)
 
     var app = builder.Build();
     await InitializeStoreAsync(app.Services).ConfigureAwait(false);
+
+    if (!string.IsNullOrWhiteSpace(options.OAuth2.Authority))
+    {
+        app.UseAuthentication();
+        app.UseAuthorization();
+    }
+
+    app.UseProfileResolution();
     app.MapMcp();
     await app.RunAsync().ConfigureAwait(false);
 }
@@ -88,6 +104,11 @@ static void ConfigureLogging(ILoggingBuilder logging)
 static void ConfigureServices(IServiceCollection services, IConfiguration configuration, bool includeHttp)
 {
     services.AddMcpDatabaseQueryAppCore(configuration);
+    services.AddProfiles();
+    if (includeHttp)
+    {
+        services.AddOAuth2ProfileAuth(configuration);
+    }
     services.AddPostgresProvider();
     services.AddSqlServerProvider();
     services.AddSingleton<MetadataCache>();
@@ -170,4 +191,18 @@ static async Task InitializeStoreAsync(IServiceProvider services)
     using var scope = services.CreateScope();
     var store = scope.ServiceProvider.GetRequiredService<IMetadataStore>();
     await store.InitializeAsync(CancellationToken.None).ConfigureAwait(false);
+
+    // Migrations seed the default profile, but call EnsureDefaultAsync as a
+    // safety net for upgrade paths that ran v3 → v4 against an exotic schema state.
+    var profiles = scope.ServiceProvider.GetRequiredService<IProfileStore>();
+    await profiles.EnsureDefaultAsync(CancellationToken.None).ConfigureAwait(false);
+}
+
+static async Task<IProfileScope> OpenDefaultProfileScopeAsync(IServiceProvider services)
+{
+    var profiles = services.GetRequiredService<IProfileStore>();
+    var accessor = services.GetRequiredService<IProfileContextAccessor>();
+    var defaultProfile = await profiles.GetAsync(ProfileId.Default, CancellationToken.None).ConfigureAwait(false)
+        ?? throw new InvalidOperationException("Default profile is missing after store initialization.");
+    return accessor.Begin(defaultProfile);
 }
