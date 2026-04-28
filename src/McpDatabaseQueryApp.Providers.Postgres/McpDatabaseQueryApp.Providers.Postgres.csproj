@@ -8,6 +8,7 @@
     <PackageReference Include="Npgsql" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="pgsqlparser" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\McpDatabaseQueryApp.Core\McpDatabaseQueryApp.Core.csproj" />
