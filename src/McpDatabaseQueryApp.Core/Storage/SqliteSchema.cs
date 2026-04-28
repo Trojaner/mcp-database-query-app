@@ -7,7 +7,7 @@ namespace McpDatabaseQueryApp.Core.Storage;
 
 public static class SqliteSchema
 {
-    public const int CurrentVersion = 5;
+    public const int CurrentVersion = 6;
 
     public static async Task EnsureCreatedAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
@@ -52,6 +52,12 @@ public static class SqliteSchema
         {
             await ApplyV5Async(connection, cancellationToken).ConfigureAwait(false);
             await StampAsync(connection, 5, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (version < 6)
+        {
+            await ApplyV6Async(connection, cancellationToken).ConfigureAwait(false);
+            await StampAsync(connection, 6, cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -295,6 +301,38 @@ public static class SqliteSchema
                 FOREIGN KEY (profile_id) REFERENCES profiles(profile_id) ON DELETE CASCADE
             );
             CREATE INDEX IF NOT EXISTS idx_acl_entries_profile ON acl_entries(profile_id, priority DESC);
+            """;
+
+        await connection.ExecuteAsync(new CommandDefinition(ddl, cancellationToken: cancellationToken)).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// v6: introduces the <c>isolation_rules</c> table backing dynamic
+    /// data-isolation rules (Phase 2B / Task 5). Static rules from
+    /// <c>appsettings.json</c> are not persisted — only runtime-managed
+    /// rules live here.
+    /// </summary>
+    private static async Task ApplyV6Async(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        const string ddl = """
+            CREATE TABLE IF NOT EXISTS isolation_rules (
+                id                  TEXT NOT NULL PRIMARY KEY,
+                profile_id          TEXT NOT NULL,
+                host                TEXT NOT NULL,
+                port                INTEGER NOT NULL,
+                database_name       TEXT NOT NULL,
+                schema_name         TEXT NOT NULL,
+                table_name          TEXT NOT NULL,
+                filter_kind         TEXT NOT NULL,
+                filter_payload_json TEXT NOT NULL,
+                priority            INTEGER NOT NULL DEFAULT 0,
+                description         TEXT NULL,
+                created_at          TEXT NOT NULL,
+                updated_at          TEXT NOT NULL,
+                FOREIGN KEY (profile_id) REFERENCES profiles(profile_id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_isolation_rules_lookup
+                ON isolation_rules(profile_id, host, port, database_name, schema_name, table_name);
             """;
 
         await connection.ExecuteAsync(new CommandDefinition(ddl, cancellationToken: cancellationToken)).ConfigureAwait(false);
