@@ -111,6 +111,8 @@ static void ConfigureServices(IServiceCollection services, IConfiguration config
     }
     services.AddPostgresProvider();
     services.AddSqlServerProvider();
+    services.AddQueryExecutionPipeline();
+    services.AddMcpDestructiveOperationConfirmer();
     services.AddSingleton<MetadataCache>();
     services.AddSingleton<IElicitationGateway, ElicitationGateway>();
     services.AddSingleton<CompletionRouter>();
