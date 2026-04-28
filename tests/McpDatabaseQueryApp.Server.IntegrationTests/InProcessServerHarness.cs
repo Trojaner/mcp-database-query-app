@@ -156,6 +156,8 @@ public sealed class InProcessServerHarness : IAsyncDisposable
         services.AddSqlServerProvider();
         services.AddQueryExecutionPipeline();
         services.AddAclAuthorization(configuration);
+        services.AddDataIsolation(configuration);
+        services.AddHostedService<Hosting.IsolationRuleBootstrap>();
         services.AddMcpDestructiveOperationConfirmer();
 
         // Register the static-entry bootstrap as both the IAclStaticEntrySource
@@ -197,11 +199,17 @@ public sealed class InProcessServerHarness : IAsyncDisposable
         var profileStore = provider.GetRequiredService<IProfileStore>();
         await profileStore.EnsureDefaultAsync(cancellationToken);
 
-        // The harness does not run the .NET hosted-service lifecycle, so kick
-        // the ACL static-entry bootstrap by hand. Production wires this via
-        // AddHostedService and StartAsync runs at IHost.StartAsync time.
+        // BuildServiceProvider does not run IHostedServices automatically.
+        // Manually start the ones the harness depends on (ACL static-entry
+        // bootstrap, isolation-rule bootstrap, etc.). The ACL bootstrap is
+        // also registered as a singleton so we add it explicitly in case it
+        // wasn't picked up by GetServices<IHostedService>.
         await provider.GetRequiredService<McpDatabaseQueryApp.Server.Hosting.AclBootstrapHostedService>()
             .StartAsync(cancellationToken);
+        foreach (var hosted in provider.GetServices<Microsoft.Extensions.Hosting.IHostedService>())
+        {
+            await hosted.StartAsync(cancellationToken).ConfigureAwait(false);
+        }
 
         var defaultProfile = await profileStore.GetAsync(ProfileId.Default, cancellationToken)
             ?? throw new InvalidOperationException("Default profile missing.");

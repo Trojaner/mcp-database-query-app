@@ -95,15 +95,17 @@ public sealed class IsolationRuleEngine : IIsolationRuleEngine
             }
 
             var (predicateSql, predicateParameters) = rule.Filter.ToPredicate(filterContext);
-            // Bind the directive to the rule's own scope so the rewriter
-            // matches against the configured schema, not whatever schema
-            // the parser inferred (which may be null when the SQL omits
-            // qualification).
+            // Bind the directive's target to whatever the matched parser
+            // reference looked like — schema-qualified or unqualified —
+            // because the rewriter compares by exact schema. If the SQL
+            // wrote FROM events (no schema), the rewriter sees Schema=null
+            // on the AST node and we mirror that here. We've already
+            // verified scope alignment via IsolationScope.MatchesObject.
             var ruleTarget = new ObjectReference(
                 ObjectKind.Table,
                 Server: null,
                 Database: null,
-                Schema: rule.Scope.Schema,
+                Schema: matchedTarget.Schema,
                 Name: rule.Scope.Table);
 
             directives.Add(new PredicateInjectionDirective(ruleTarget, predicateSql));
