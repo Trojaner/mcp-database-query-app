@@ -1,6 +1,7 @@
 using McpDatabaseQueryApp.Apps;
 using McpDatabaseQueryApp.Core.Authorization;
 using McpDatabaseQueryApp.Core.Configuration;
+using McpDatabaseQueryApp.Core.DataIsolation;
 using McpDatabaseQueryApp.Core.DependencyInjection;
 using McpDatabaseQueryApp.Core.Profiles;
 using McpDatabaseQueryApp.Core.Storage;
@@ -114,6 +115,8 @@ static void ConfigureServices(IServiceCollection services, IConfiguration config
     services.AddSqlServerProvider();
     services.AddQueryExecutionPipeline();
     services.AddAclAuthorization(configuration);
+    services.AddDataIsolation(configuration);
+    services.AddHostedService<IsolationRuleBootstrap>();
     services.AddMcpDestructiveOperationConfirmer();
     services.AddSingleton<MetadataCache>();
     services.AddSingleton<IElicitationGateway, ElicitationGateway>();
