@@ -4,20 +4,35 @@ using Dapper;
 using McpDatabaseQueryApp.Core.Configuration;
 using McpDatabaseQueryApp.Core.Connections;
 using McpDatabaseQueryApp.Core.Notes;
+using McpDatabaseQueryApp.Core.Profiles;
 using McpDatabaseQueryApp.Core.Results;
 using McpDatabaseQueryApp.Core.Scripts;
 using Microsoft.Data.Sqlite;
 
 namespace McpDatabaseQueryApp.Core.Storage;
 
+/// <summary>
+/// SQLite-backed <see cref="IMetadataStore"/>. All read/write paths are
+/// scoped by the ambient profile resolved through the
+/// <see cref="IProfileContextAccessor"/>: no method may return a row whose
+/// <c>profile_id</c> does not match the caller's current profile, and every
+/// write stamps the ambient profile id into the inserted row. This is the
+/// single chokepoint that enforces inter-profile isolation in the metadata
+/// store.
+/// </summary>
 public sealed class SqliteMetadataStore : IMetadataStore
 {
     private readonly string _connectionString;
     private readonly string _dbPath;
+    private readonly IProfileContextAccessor _profile;
 
-    public SqliteMetadataStore(McpDatabaseQueryAppOptions options)
+    /// <summary>
+    /// Creates a new <see cref="SqliteMetadataStore"/>.
+    /// </summary>
+    public SqliteMetadataStore(McpDatabaseQueryAppOptions options, IProfileContextAccessor profile)
     {
         ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(profile);
         _dbPath = PathResolver.Resolve(options.MetadataDbPath);
         Directory.CreateDirectory(Path.GetDirectoryName(_dbPath) ?? ".");
         _connectionString = new SqliteConnectionStringBuilder
@@ -27,8 +42,12 @@ public sealed class SqliteMetadataStore : IMetadataStore
             Cache = SqliteCacheMode.Shared,
             Pooling = true,
         }.ToString();
+        _profile = profile;
     }
 
+    private string CurrentProfile => _profile.CurrentIdOrDefault.Value;
+
+    /// <inheritdoc/>
     public async Task InitializeAsync(CancellationToken cancellationToken)
     {
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
@@ -37,16 +56,18 @@ public sealed class SqliteMetadataStore : IMetadataStore
         await SqliteSchema.EnsureCreatedAsync(connection, cancellationToken).ConfigureAwait(false);
     }
 
+    /// <inheritdoc/>
     public async Task<DatabaseRecord?> GetDatabaseAsync(string nameOrId, CancellationToken cancellationToken)
     {
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
         var row = await connection.QuerySingleOrDefaultAsync<DatabaseRow>(new CommandDefinition(
-            "SELECT * FROM databases WHERE name = @key OR id = @key LIMIT 1;",
-            new { key = nameOrId },
+            "SELECT * FROM databases WHERE profile_id = @profile AND (name = @key OR id = @key) LIMIT 1;",
+            new { key = nameOrId, profile = CurrentProfile },
             cancellationToken: cancellationToken)).ConfigureAwait(false);
         return row is null ? null : MapRecord(row);
     }
 
+    /// <inheritdoc/>
     public async Task<(IReadOnlyList<ConnectionDescriptor> Items, long Total)> ListDatabasesAsync(
         int offset,
         int limit,
@@ -56,24 +77,25 @@ public sealed class SqliteMetadataStore : IMetadataStore
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
         var normalizedFilter = string.IsNullOrWhiteSpace(filter) ? null : $"%{filter.Trim()}%";
         var total = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
-            "SELECT COUNT(*) FROM databases WHERE (@f IS NULL OR name LIKE @f OR database_name LIKE @f);",
-            new { f = normalizedFilter },
+            "SELECT COUNT(*) FROM databases WHERE profile_id = @profile AND (@f IS NULL OR name LIKE @f OR database_name LIKE @f);",
+            new { f = normalizedFilter, profile = CurrentProfile },
             cancellationToken: cancellationToken)).ConfigureAwait(false);
 
         var rows = await connection.QueryAsync<DatabaseRow>(new CommandDefinition(
             """
             SELECT * FROM databases
-            WHERE (@f IS NULL OR name LIKE @f OR database_name LIKE @f)
+            WHERE profile_id = @profile AND (@f IS NULL OR name LIKE @f OR database_name LIKE @f)
             ORDER BY name
             LIMIT @limit OFFSET @offset;
             """,
-            new { f = normalizedFilter, limit, offset },
+            new { f = normalizedFilter, limit, offset, profile = CurrentProfile },
             cancellationToken: cancellationToken)).ConfigureAwait(false);
 
         var items = rows.Select(MapDescriptor).ToList();
         return (items, total);
     }
 
+    /// <inheritdoc/>
     public async Task<ConnectionDescriptor> UpsertDatabaseAsync(
         ConnectionDescriptor descriptor,
         byte[] passwordCipher,
@@ -83,13 +105,13 @@ public sealed class SqliteMetadataStore : IMetadataStore
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
         await connection.ExecuteAsync(new CommandDefinition(
             """
-            INSERT INTO databases(id, name, provider, host, port, database_name, username,
+            INSERT INTO databases(id, profile_id, name, provider, host, port, database_name, username,
                 password_enc, password_nonce, ssl_mode, trust_server_cert, read_only,
                 default_schema, tags_json, extra_json, created_at, updated_at)
-            VALUES (@Id, @Name, @Provider, @Host, @Port, @Database, @Username,
+            VALUES (@Id, @Profile, @Name, @Provider, @Host, @Port, @Database, @Username,
                 @PasswordEnc, @PasswordNonce, @SslMode, @TrustServerCert, @ReadOnly,
                 @DefaultSchema, @TagsJson, @ExtraJson, @CreatedAt, @UpdatedAt)
-            ON CONFLICT(name) DO UPDATE SET
+            ON CONFLICT(profile_id, name) DO UPDATE SET
                 provider = excluded.provider,
                 host = excluded.host,
                 port = excluded.port,
@@ -108,6 +130,7 @@ public sealed class SqliteMetadataStore : IMetadataStore
             new
             {
                 descriptor.Id,
+                Profile = CurrentProfile,
                 descriptor.Name,
                 Provider = descriptor.Provider.ToString(),
                 descriptor.Host,
@@ -129,6 +152,7 @@ public sealed class SqliteMetadataStore : IMetadataStore
         return descriptor;
     }
 
+    /// <inheritdoc/>
     public async Task<ConnectionDescriptor> UpdateDatabaseMetadataAsync(
         ConnectionDescriptor descriptor,
         CancellationToken cancellationToken)
@@ -149,11 +173,12 @@ public sealed class SqliteMetadataStore : IMetadataStore
                 tags_json = @TagsJson,
                 extra_json = @ExtraJson,
                 updated_at = @UpdatedAt
-            WHERE id = @Id OR name = @Name;
+            WHERE profile_id = @Profile AND (id = @Id OR name = @Name);
             """,
             new
             {
                 descriptor.Id,
+                Profile = CurrentProfile,
                 descriptor.Name,
                 Provider = descriptor.Provider.ToString(),
                 descriptor.Host,
@@ -178,26 +203,29 @@ public sealed class SqliteMetadataStore : IMetadataStore
         return descriptor;
     }
 
+    /// <inheritdoc/>
     public async Task<bool> DeleteDatabaseAsync(string nameOrId, CancellationToken cancellationToken)
     {
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
         var rows = await connection.ExecuteAsync(new CommandDefinition(
-            "DELETE FROM databases WHERE id = @key OR name = @key;",
-            new { key = nameOrId },
+            "DELETE FROM databases WHERE profile_id = @profile AND (id = @key OR name = @key);",
+            new { key = nameOrId, profile = CurrentProfile },
             cancellationToken: cancellationToken)).ConfigureAwait(false);
         return rows > 0;
     }
 
+    /// <inheritdoc/>
     public async Task<ScriptRecord?> GetScriptAsync(string nameOrId, CancellationToken cancellationToken)
     {
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
         var row = await connection.QuerySingleOrDefaultAsync<ScriptRow>(new CommandDefinition(
-            "SELECT * FROM scripts WHERE id = @key OR name = @key LIMIT 1;",
-            new { key = nameOrId },
+            "SELECT * FROM scripts WHERE profile_id = @profile AND (id = @key OR name = @key) LIMIT 1;",
+            new { key = nameOrId, profile = CurrentProfile },
             cancellationToken: cancellationToken)).ConfigureAwait(false);
         return row is null ? null : MapScript(row);
     }
 
+    /// <inheritdoc/>
     public async Task<(IReadOnlyList<ScriptRecord> Items, long Total)> ListScriptsAsync(
         int offset,
         int limit,
@@ -207,31 +235,32 @@ public sealed class SqliteMetadataStore : IMetadataStore
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
         var normalizedFilter = string.IsNullOrWhiteSpace(filter) ? null : $"%{filter.Trim()}%";
         var total = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
-            "SELECT COUNT(*) FROM scripts WHERE (@f IS NULL OR name LIKE @f OR description LIKE @f);",
-            new { f = normalizedFilter },
+            "SELECT COUNT(*) FROM scripts WHERE profile_id = @profile AND (@f IS NULL OR name LIKE @f OR description LIKE @f);",
+            new { f = normalizedFilter, profile = CurrentProfile },
             cancellationToken: cancellationToken)).ConfigureAwait(false);
 
         var rows = await connection.QueryAsync<ScriptRow>(new CommandDefinition(
             """
             SELECT * FROM scripts
-            WHERE (@f IS NULL OR name LIKE @f OR description LIKE @f)
+            WHERE profile_id = @profile AND (@f IS NULL OR name LIKE @f OR description LIKE @f)
             ORDER BY name
             LIMIT @limit OFFSET @offset;
             """,
-            new { f = normalizedFilter, limit, offset },
+            new { f = normalizedFilter, limit, offset, profile = CurrentProfile },
             cancellationToken: cancellationToken)).ConfigureAwait(false);
 
         return (rows.Select(MapScript).ToList(), total);
     }
 
+    /// <inheritdoc/>
     public async Task<ScriptRecord> UpsertScriptAsync(ScriptRecord script, CancellationToken cancellationToken)
     {
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
         await connection.ExecuteAsync(new CommandDefinition(
             """
-            INSERT INTO scripts(id, name, description, provider, sql_text, destructive, tags_json, notes, parameters_json, created_at, updated_at)
-            VALUES (@Id, @Name, @Description, @Provider, @SqlText, @Destructive, @TagsJson, @Notes, @ParametersJson, @CreatedAt, @UpdatedAt)
-            ON CONFLICT(name) DO UPDATE SET
+            INSERT INTO scripts(id, profile_id, name, description, provider, sql_text, destructive, tags_json, notes, parameters_json, created_at, updated_at)
+            VALUES (@Id, @Profile, @Name, @Description, @Provider, @SqlText, @Destructive, @TagsJson, @Notes, @ParametersJson, @CreatedAt, @UpdatedAt)
+            ON CONFLICT(profile_id, name) DO UPDATE SET
                 description = excluded.description,
                 provider = excluded.provider,
                 sql_text = excluded.sql_text,
@@ -244,6 +273,7 @@ public sealed class SqliteMetadataStore : IMetadataStore
             new
             {
                 script.Id,
+                Profile = CurrentProfile,
                 script.Name,
                 script.Description,
                 Provider = script.Provider?.ToString(),
@@ -259,37 +289,41 @@ public sealed class SqliteMetadataStore : IMetadataStore
         return script;
     }
 
+    /// <inheritdoc/>
     public async Task<bool> DeleteScriptAsync(string nameOrId, CancellationToken cancellationToken)
     {
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
         var rows = await connection.ExecuteAsync(new CommandDefinition(
-            "DELETE FROM scripts WHERE id = @key OR name = @key;",
-            new { key = nameOrId },
+            "DELETE FROM scripts WHERE profile_id = @profile AND (id = @key OR name = @key);",
+            new { key = nameOrId, profile = CurrentProfile },
             cancellationToken: cancellationToken)).ConfigureAwait(false);
         return rows > 0;
     }
 
+    /// <inheritdoc/>
     public async Task<ResultSetRecord?> GetResultSetAsync(string id, CancellationToken cancellationToken)
     {
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
         var row = await connection.QuerySingleOrDefaultAsync<ResultSetRow>(new CommandDefinition(
-            "SELECT * FROM result_sets WHERE id = @id;",
-            new { id },
+            "SELECT * FROM result_sets WHERE id = @id AND profile_id = @profile;",
+            new { id, profile = CurrentProfile },
             cancellationToken: cancellationToken)).ConfigureAwait(false);
         return row is null ? null : MapResultSet(row);
     }
 
+    /// <inheritdoc/>
     public async Task InsertResultSetAsync(ResultSetRecord record, CancellationToken cancellationToken)
     {
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
         await connection.ExecuteAsync(new CommandDefinition(
             """
-            INSERT INTO result_sets(id, connection_id, column_meta_json, rows_path, total_rows, created_at, expires_at)
-            VALUES (@Id, @ConnectionId, @ColumnMeta, @RowsPath, @TotalRows, @CreatedAt, @ExpiresAt);
+            INSERT INTO result_sets(id, profile_id, connection_id, column_meta_json, rows_path, total_rows, created_at, expires_at)
+            VALUES (@Id, @Profile, @ConnectionId, @ColumnMeta, @RowsPath, @TotalRows, @CreatedAt, @ExpiresAt);
             """,
             new
             {
                 record.Id,
+                Profile = CurrentProfile,
                 record.ConnectionId,
                 ColumnMeta = JsonSerializer.Serialize(record.Columns),
                 record.RowsPath,
@@ -300,8 +334,12 @@ public sealed class SqliteMetadataStore : IMetadataStore
             cancellationToken: cancellationToken)).ConfigureAwait(false);
     }
 
+    /// <inheritdoc/>
     public async Task PurgeExpiredResultSetsAsync(DateTimeOffset now, CancellationToken cancellationToken)
     {
+        // Janitor purge runs across all profiles by design (it is a global
+        // background task that has no per-request profile scope). The
+        // profile_id column is preserved for forensics but not filtered on.
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
         var expired = await connection.QueryAsync<string>(new CommandDefinition(
             "SELECT rows_path FROM result_sets WHERE expires_at <= @now;",
@@ -329,16 +367,18 @@ public sealed class SqliteMetadataStore : IMetadataStore
             cancellationToken: cancellationToken)).ConfigureAwait(false);
     }
 
+    /// <inheritdoc/>
     public async Task<NoteRecord?> GetNoteAsync(NoteTargetType targetType, string targetPath, CancellationToken cancellationToken)
     {
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
         var row = await connection.QuerySingleOrDefaultAsync<NoteRow>(new CommandDefinition(
-            "SELECT * FROM notes WHERE target_type = @type AND target_path = @path LIMIT 1;",
-            new { type = targetType.ToString(), path = targetPath },
+            "SELECT * FROM notes WHERE profile_id = @profile AND target_type = @type AND target_path = @path LIMIT 1;",
+            new { type = targetType.ToString(), path = targetPath, profile = CurrentProfile },
             cancellationToken: cancellationToken)).ConfigureAwait(false);
         return row is null ? null : MapNote(row);
     }
 
+    /// <inheritdoc/>
     public async Task<(IReadOnlyList<NoteRecord> Items, long Total)> ListNotesAsync(
         NoteTargetType? targetType,
         string? pathPrefix,
@@ -351,37 +391,39 @@ public sealed class SqliteMetadataStore : IMetadataStore
         var normalizedPrefix = string.IsNullOrWhiteSpace(pathPrefix) ? null : $"{pathPrefix.Trim()}%";
 
         var total = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
-            "SELECT COUNT(*) FROM notes WHERE (@t IS NULL OR target_type = @t) AND (@p IS NULL OR target_path LIKE @p);",
-            new { t = typeFilter, p = normalizedPrefix },
+            "SELECT COUNT(*) FROM notes WHERE profile_id = @profile AND (@t IS NULL OR target_type = @t) AND (@p IS NULL OR target_path LIKE @p);",
+            new { t = typeFilter, p = normalizedPrefix, profile = CurrentProfile },
             cancellationToken: cancellationToken)).ConfigureAwait(false);
 
         var rows = await connection.QueryAsync<NoteRow>(new CommandDefinition(
             """
             SELECT * FROM notes
-            WHERE (@t IS NULL OR target_type = @t) AND (@p IS NULL OR target_path LIKE @p)
+            WHERE profile_id = @profile AND (@t IS NULL OR target_type = @t) AND (@p IS NULL OR target_path LIKE @p)
             ORDER BY target_type, target_path
             LIMIT @limit OFFSET @offset;
             """,
-            new { t = typeFilter, p = normalizedPrefix, limit, offset },
+            new { t = typeFilter, p = normalizedPrefix, limit, offset, profile = CurrentProfile },
             cancellationToken: cancellationToken)).ConfigureAwait(false);
 
         return (rows.Select(MapNote).ToList(), total);
     }
 
+    /// <inheritdoc/>
     public async Task<NoteRecord> UpsertNoteAsync(NoteRecord note, CancellationToken cancellationToken)
     {
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
         await connection.ExecuteAsync(new CommandDefinition(
             """
-            INSERT INTO notes(id, target_type, target_path, note_text, created_at, updated_at)
-            VALUES (@Id, @TargetType, @TargetPath, @NoteText, @CreatedAt, @UpdatedAt)
-            ON CONFLICT(target_type, target_path) DO UPDATE SET
+            INSERT INTO notes(id, profile_id, target_type, target_path, note_text, created_at, updated_at)
+            VALUES (@Id, @Profile, @TargetType, @TargetPath, @NoteText, @CreatedAt, @UpdatedAt)
+            ON CONFLICT(profile_id, target_type, target_path) DO UPDATE SET
                 note_text = excluded.note_text,
                 updated_at = excluded.updated_at;
             """,
             new
             {
                 note.Id,
+                Profile = CurrentProfile,
                 TargetType = note.TargetType.ToString(),
                 note.TargetPath,
                 note.NoteText,
@@ -392,16 +434,18 @@ public sealed class SqliteMetadataStore : IMetadataStore
         return note;
     }
 
+    /// <inheritdoc/>
     public async Task<bool> DeleteNoteAsync(NoteTargetType targetType, string targetPath, CancellationToken cancellationToken)
     {
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
         var rows = await connection.ExecuteAsync(new CommandDefinition(
-            "DELETE FROM notes WHERE target_type = @type AND target_path = @path;",
-            new { type = targetType.ToString(), path = targetPath },
+            "DELETE FROM notes WHERE profile_id = @profile AND target_type = @type AND target_path = @path;",
+            new { type = targetType.ToString(), path = targetPath, profile = CurrentProfile },
             cancellationToken: cancellationToken)).ConfigureAwait(false);
         return rows > 0;
     }
 
+    /// <inheritdoc/>
     public async Task<IReadOnlyDictionary<string, NoteRecord>> GetNotesBulkAsync(
         NoteTargetType targetType,
         IReadOnlyList<string> targetPaths,
@@ -414,8 +458,8 @@ public sealed class SqliteMetadataStore : IMetadataStore
 
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
         var rows = await connection.QueryAsync<NoteRow>(new CommandDefinition(
-            "SELECT * FROM notes WHERE target_type = @type AND target_path IN @paths;",
-            new { type = targetType.ToString(), paths = targetPaths },
+            "SELECT * FROM notes WHERE profile_id = @profile AND target_type = @type AND target_path IN @paths;",
+            new { type = targetType.ToString(), paths = targetPaths, profile = CurrentProfile },
             cancellationToken: cancellationToken)).ConfigureAwait(false);
 
         return rows.Select(MapNote).ToDictionary(n => n.TargetPath, StringComparer.OrdinalIgnoreCase);
@@ -506,6 +550,7 @@ public sealed class SqliteMetadataStore : IMetadataStore
     private sealed class DatabaseRow
     {
         public string id { get; set; } = string.Empty;
+        public string profile_id { get; set; } = ProfileId.DefaultValue;
         public string name { get; set; } = string.Empty;
         public string provider { get; set; } = string.Empty;
         public string host { get; set; } = string.Empty;
@@ -527,6 +572,7 @@ public sealed class SqliteMetadataStore : IMetadataStore
     private sealed class ScriptRow
     {
         public string id { get; set; } = string.Empty;
+        public string profile_id { get; set; } = ProfileId.DefaultValue;
         public string name { get; set; } = string.Empty;
         public string? description { get; set; }
         public string? provider { get; set; }
@@ -542,6 +588,7 @@ public sealed class SqliteMetadataStore : IMetadataStore
     private sealed class ResultSetRow
     {
         public string id { get; set; } = string.Empty;
+        public string profile_id { get; set; } = ProfileId.DefaultValue;
         public string connection_id { get; set; } = string.Empty;
         public string column_meta_json { get; set; } = string.Empty;
         public string rows_path { get; set; } = string.Empty;
@@ -553,6 +600,7 @@ public sealed class SqliteMetadataStore : IMetadataStore
     private sealed class NoteRow
     {
         public string id { get; set; } = string.Empty;
+        public string profile_id { get; set; } = ProfileId.DefaultValue;
         public string target_type { get; set; } = string.Empty;
         public string target_path { get; set; } = string.Empty;
         public string note_text { get; set; } = string.Empty;

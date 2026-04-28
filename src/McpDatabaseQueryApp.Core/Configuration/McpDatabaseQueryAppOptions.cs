@@ -26,6 +26,8 @@ public sealed class McpDatabaseQueryAppOptions
 
     public SecretsOptions Secrets { get; set; } = new();
 
+    public OAuth2Options OAuth2 { get; set; } = new();
+
     public TimeSpan ConnectionIdleTimeout { get; set; } = TimeSpan.FromMinutes(30);
 
     public bool AutoConnect { get; set; } = true;
@@ -67,4 +69,32 @@ public sealed class LoggingOptions
 public sealed class SecretsOptions
 {
     public string KeyRef { get; set; } = "UserSecrets:McpDatabaseQueryApp:MasterKey";
+}
+
+/// <summary>
+/// OAuth2 / OIDC validation options for the HTTP transport. When
+/// <see cref="Authority"/> is unset the HTTP transport disables JWT bearer
+/// validation entirely and every request resolves to the built-in default
+/// profile.
+/// </summary>
+public sealed class OAuth2Options
+{
+    /// <summary>OIDC authority (issuer URL) used to discover signing keys.</summary>
+    public string? Authority { get; set; }
+
+    /// <summary>Required <c>aud</c> claim value, if any.</summary>
+    public string? Audience { get; set; }
+
+    /// <summary>Whether HTTPS is required when fetching authority metadata.</summary>
+    public bool RequireHttps { get; set; } = true;
+
+    /// <summary>Override metadata address (defaults to <c>{Authority}/.well-known/openid-configuration</c>).</summary>
+    public string? MetadataAddress { get; set; }
+
+    /// <summary>
+    /// When true (default), unknown <c>(issuer, subject)</c> pairs auto-create
+    /// a profile on first sight. When false, unknown identities are rejected
+    /// with HTTP 403.
+    /// </summary>
+    public bool AutoProvisionProfiles { get; set; } = true;
 }
