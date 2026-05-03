@@ -1,0 +1,13 @@
+**/bin
+**/obj
+**/node_modules
+data
+tests
+.git
+.github
+assets
+scripts
+*.md
+Dockerfile
+.dockerignore
+.env

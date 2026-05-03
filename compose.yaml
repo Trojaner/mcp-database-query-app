@@ -1,0 +1,71 @@
+services:
+  mcp-database-query-app:
+    build: .
+    image: mcp-database-query-app:local
+    container_name: mcp-database-query-app
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/data
+    restart: unless-stopped
+    environment:
+      # --- ASP.NET Core host ---
+      ASPNETCORE_URLS: http://0.0.0.0:8080
+      DOTNET_ENVIRONMENT: Production
+
+      # --- McpDatabaseQueryApp: top-level ---
+      McpDatabaseQueryApp__MetadataDbPath: /data/mcp-database-query-app.db
+      McpDatabaseQueryApp__DefaultResultLimit: "500"
+      McpDatabaseQueryApp__MaxResultLimit: "5000"
+      McpDatabaseQueryApp__AllowDisableLimit: "true"
+      McpDatabaseQueryApp__ReadOnlyByDefault: "true"
+      McpDatabaseQueryApp__ResultSetTtl: "00:10:00"
+      McpDatabaseQueryApp__SlowQueryThresholdMs: "2000"
+      McpDatabaseQueryApp__ConnectionIdleTimeout: "00:30:00"
+      McpDatabaseQueryApp__AutoConnect: "true"
+      McpDatabaseQueryApp__DangerouslySkipPermissions: "false"
+
+      # --- Transport ---
+      McpDatabaseQueryApp__Transport__Stdio__Enabled: "false"
+      McpDatabaseQueryApp__Transport__Http__Enabled: "true"
+      McpDatabaseQueryApp__Transport__Http__Urls: http://0.0.0.0:8080
+
+      # --- UI ---
+      McpDatabaseQueryApp__Ui__Enabled: "true"
+
+      # --- Logging (app-level, not Microsoft.Extensions.Logging) ---
+      McpDatabaseQueryApp__Logging__EmitSqlToMcpClient: "true"
+      McpDatabaseQueryApp__Logging__RedactLiteralsInLogs: "true"
+
+      # --- Secrets ---
+      # Format: <Scheme>:<Path>, e.g. Env:MCP_MASTER_KEY, File:/run/secrets/master-key
+      McpDatabaseQueryApp__Secrets__KeyRef: Env:MCP_MASTER_KEY
+      MCP_MASTER_KEY: ${MCP_MASTER_KEY:?set MCP_MASTER_KEY in .env (run scripts/gen-master-key.sh)}
+
+      # --- OAuth2 / OIDC (HTTP transport only) ---
+      # Leave Authority empty to disable JWT validation (every request → default profile).
+      McpDatabaseQueryApp__OAuth2__Authority: ""
+      McpDatabaseQueryApp__OAuth2__Audience: ""
+      McpDatabaseQueryApp__OAuth2__RequireHttps: "true"
+      McpDatabaseQueryApp__OAuth2__MetadataAddress: ""
+      McpDatabaseQueryApp__OAuth2__AutoProvisionProfiles: "true"
+
+      # --- Authorization (ACL) ---
+      # AllowAll | DenyAll
+      McpDatabaseQueryApp__Authorization__DefaultProfilePolicy: AllowAll
+      McpDatabaseQueryApp__Authorization__CacheTtl: "00:00:30"
+      # Static ACL seed entries are list-bound — add via __StaticEntries__0__*, e.g.:
+      # McpDatabaseQueryApp__Authorization__StaticEntries__0__ProfileId: default
+      # McpDatabaseQueryApp__Authorization__StaticEntries__0__Effect: Allow
+      # McpDatabaseQueryApp__Authorization__StaticEntries__0__AllowedOperations__0: Read
+
+      # --- Data isolation ---
+      # Static rules are list-bound — add via __StaticRules__0__*
+
+      # --- Admin REST API (opt-in) ---
+      McpDatabaseQueryApp__AdminApi__Enabled: "false"
+      McpDatabaseQueryApp__AdminApi__ApiKey: ""
+      McpDatabaseQueryApp__AdminApi__ApiKeyRef: ""
+      McpDatabaseQueryApp__AdminApi__RequireHttps: "true"
+      McpDatabaseQueryApp__AdminApi__AllowedHosts__0: 127.0.0.1
+      McpDatabaseQueryApp__AdminApi__AllowedHosts__1: localhost

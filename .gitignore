@@ -25,4 +25,4 @@ appsettings.Local.json
 *.db-shm
 *.db-wal
 .claude
-*.lscache
+*.lscachedata/
