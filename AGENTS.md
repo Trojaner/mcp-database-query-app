@@ -197,14 +197,24 @@ checked against this list before merging.
 
 - Static process config: `appsettings.json` → env vars → user secrets,
   bound to `McpDatabaseQueryAppOptions`.
-- Pre-defined connections may be seeded at startup from
-  `McpDatabaseQueryApp:Connections` (a list of `PredefinedConnectionOptions`).
-  `PredefinedConnectionSeeder` runs inside `InitializeStoreAsync`, under the
-  default-profile scope, and upserts each entry by name through
-  `IMetadataStore` with the password encrypted via `ICredentialProtector`.
-  Seeding is idempotent and never aborts startup — a malformed or
-  un-encryptable entry is logged and skipped. Plaintext passwords live only in
-  process config (never in the SQLite row or any MCP payload).
+- Pre-defined connections may be seeded at startup from two app-scoped config
+  shapes: `McpDatabaseQueryApp:Connections` (a list of
+  `PredefinedConnectionOptions` — discrete fields and/or a per-entry
+  `ConnectionString`) and `McpDatabaseQueryApp:ConnectionStrings` (a name →
+  connection-string map, read-only, provider inferred). Keep connection-string
+  config under the app section, never the host's top-level `ConnectionStrings`,
+  which a child process would inherit. `PredefinedConnectionSeeder` runs inside
+  `InitializeStoreAsync`, under the default-profile scope, and upserts each
+  entry by name through `IMetadataStore` with the password encrypted via
+  `ICredentialProtector`. Raw connection strings are parsed by
+  `ConnectionStringParser`, which uses only `System.Data.Common`
+  (`DbConnectionStringBuilder`) so Core stays driver-free; it extracts only the
+  discrete fields the providers rebuild from (host, port, database, user,
+  password, SSL intent) and infers the provider (`Host` ⇒ Postgres; `Server`/
+  `Data Source` without `Host` ⇒ SQL Server; else Postgres). Seeding is
+  idempotent and never aborts startup — a malformed or un-encryptable entry is
+  logged and skipped. Plaintext passwords live only in process config (never in
+  the SQLite row or any MCP payload).
 - Runtime metadata (pre-defined databases, saved scripts, cached result
   sets) lives in SQLite at `%APPDATA%/McpDatabaseQueryApp/mcp-database-query-app.db`, accessed via
   Dapper through `IMetadataStore`. Schema is migrated at startup by

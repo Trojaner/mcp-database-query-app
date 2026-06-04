@@ -43,6 +43,22 @@ public sealed class McpDatabaseQueryAppOptions
     /// the built-in default profile on every startup.
     /// </summary>
     public IList<PredefinedConnectionOptions> Connections { get; set; } = new List<PredefinedConnectionOptions>();
+
+    /// <summary>
+    /// Raw connection strings seeded as pre-defined connections, keyed by name
+    /// (e.g. <c>McpDatabaseQueryApp:ConnectionStrings:Default</c>, or the env
+    /// var <c>McpDatabaseQueryApp__ConnectionStrings__Default=Host=...</c>).
+    /// This mirrors the conventional <c>ConnectionStrings</c> section but is
+    /// namespaced under this app, so it never collides with — or accidentally
+    /// inherits — a host process's top-level <c>ConnectionStrings</c>.
+    /// Each entry becomes a read-only connection named after its key; the
+    /// provider is inferred from the connection-string keywords. For finer
+    /// control (read-write, default schema, explicit provider, tags) use
+    /// <see cref="Connections"/> with a per-entry
+    /// <see cref="PredefinedConnectionOptions.ConnectionString"/> instead.
+    /// </summary>
+    public IDictionary<string, string> ConnectionStrings { get; set; }
+        = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 }
 
 /// <summary>
@@ -56,8 +72,21 @@ public sealed class PredefinedConnectionOptions
     /// <summary>Unique connection name; also the idempotency key for seeding.</summary>
     public string? Name { get; set; }
 
-    /// <summary>Provider kind, parsed case-insensitively (e.g. <c>Postgres</c>, <c>SqlServer</c>).</summary>
+    /// <summary>
+    /// Provider kind, parsed case-insensitively (e.g. <c>Postgres</c>,
+    /// <c>SqlServer</c>). Optional when <see cref="ConnectionString"/> is set —
+    /// the provider is then inferred from the connection-string keywords.
+    /// </summary>
     public string? Provider { get; set; }
+
+    /// <summary>
+    /// Raw ADO.NET connection string. When set, its keywords populate the
+    /// discrete fields below; any discrete field set alongside it wins. The
+    /// provider is inferred from the keywords when <see cref="Provider"/> is
+    /// omitted (a <c>Host</c> keyword implies PostgreSQL; <c>Server</c> /
+    /// <c>Data Source</c> without <c>Host</c> implies SQL Server).
+    /// </summary>
+    public string? ConnectionString { get; set; }
 
     public string? Host { get; set; }
 

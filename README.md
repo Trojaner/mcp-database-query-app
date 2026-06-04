@@ -187,6 +187,51 @@ McpDatabaseQueryApp__Connections__0__ReadOnly=true
 McpDatabaseQueryApp__Connections__0__DefaultSchema=es
 ```
 
+#### Seeding from a connection string
+
+If you'd rather hand the server a full connection string, set
+`McpDatabaseQueryApp:ConnectionStrings:<name>` — the same shape as the
+conventional `ConnectionStrings` section, but **namespaced under this app** so
+it never collides with (or silently inherits) a host process's top-level
+`ConnectionStrings`. Each entry becomes a **read-only** connection named after
+its key, and the provider is **inferred from the keywords**:
+
+```bash
+# env: a Host= keyword implies Postgres; Server=/Data Source= without Host implies SQL Server
+McpDatabaseQueryApp__ConnectionStrings__scraper=Host=db.internal;Port=5434;Database=etsy_listings;User ID=etsy;Password=etsy_secret;SSL Mode=Disable
+McpDatabaseQueryApp__Secrets__KeyRef=ENV:MCP_DATABASE_QUERY_APP_MASTER_KEY
+```
+
+```jsonc
+{
+  "McpDatabaseQueryApp": {
+    "ConnectionStrings": {
+      "scraper": "Host=db.internal;Port=5434;Database=etsy_listings;User ID=etsy;Password=etsy_secret;SSL Mode=Disable"
+    }
+  }
+}
+```
+
+For finer control alongside a connection string — read-write, a default
+schema, an explicit provider, or tags — put the connection string on a
+`Connections` entry instead; discrete fields set on the same entry take
+precedence over the parsed ones:
+
+```jsonc
+{
+  "McpDatabaseQueryApp": {
+    "Connections": [
+      {
+        "Name": "scraper",
+        "ConnectionString": "Host=db.internal;Database=etsy_listings;Username=etsy;Password=etsy_secret",
+        "ReadOnly": true,
+        "DefaultSchema": "es"
+      }
+    ]
+  }
+}
+```
+
 Notes:
 
 - **A master key is required.** Seeded passwords are encrypted with the key
@@ -195,10 +240,18 @@ Notes:
 - Seeding is **idempotent** — entries are keyed by `Name`, so restarting
   refreshes existing rows rather than duplicating them. Edit the config and
   restart to update a connection.
-- `ReadOnly` defaults to `true` and `SslMode` defaults to `Require`; set
-  `SslMode=Disable` for local databases without TLS.
-- Required per entry: `Name`, `Provider`, `Host`, `Database`, `Username`,
-  `Password`. A malformed entry is skipped without aborting the others.
+- `ReadOnly` defaults to `true`. `SslMode` defaults to the provider's natural
+  default when neither a discrete field nor the connection string specifies it
+  (`Prefer` for Postgres, `Require`/Mandatory for SQL Server); set
+  `SslMode=Disable` (Postgres) or `Encrypt=false` (SQL Server) for databases
+  without TLS.
+- Provider inference is a heuristic: a `Host` keyword ⇒ Postgres; `Server` /
+  `Data Source` without `Host` ⇒ SQL Server; otherwise it falls back to
+  Postgres. Set `Provider` explicitly to override (e.g. a Postgres string that
+  uses `Server=`).
+- Required per connection (from discrete fields, the connection string, or a
+  mix): `Name`, provider, `Host`, `Database`, `Username`, `Password`. A
+  malformed entry is skipped without aborting the others.
 
 ## Build from source
 

@@ -162,6 +162,55 @@ public sealed class PredefinedConnectionSeederTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Seeds_from_app_scoped_connection_strings_with_inferred_provider()
+    {
+        _options.ConnectionStrings["scraper"] =
+            "Host=db.internal;Port=5434;Database=etsy_listings;User ID=etsy;Password=etsy_secret;SSL Mode=Disable";
+
+        await CreateSeeder().SeedAsync(CancellationToken.None);
+
+        var record = await ReadUnderDefaultProfileAsync(() => _metadata.GetDatabaseAsync("scraper", CancellationToken.None));
+        record.Should().NotBeNull();
+        record!.Descriptor.Provider.Should().Be(DatabaseKind.Postgres);
+        record.Descriptor.Host.Should().Be("db.internal");
+        record.Descriptor.Port.Should().Be(5434);
+        record.Descriptor.Database.Should().Be("etsy_listings");
+        record.Descriptor.Username.Should().Be("etsy");
+        record.Descriptor.SslMode.Should().Be("Disable");
+        record.Descriptor.ReadOnly.Should().BeTrue();
+
+        using (_profileContext.Begin(await DefaultProfileAsync()))
+        {
+            _protector.Decrypt(record.PasswordCipher, record.PasswordNonce).Should().Be("etsy_secret");
+        }
+    }
+
+    [Fact]
+    public async Task Per_entry_connection_string_allows_discrete_overrides()
+    {
+        _options.Connections.Add(new PredefinedConnectionOptions
+        {
+            Name = "scraper",
+            // Provider omitted on purpose — inferred from the Host keyword.
+            ConnectionString = "Host=db.internal;Database=etsy_listings;Username=etsy;Password=etsy_secret",
+            ReadOnly = false,
+            DefaultSchema = "es",
+            Database = "override_db", // discrete field wins over the connection string
+        });
+
+        await CreateSeeder().SeedAsync(CancellationToken.None);
+
+        var record = await ReadUnderDefaultProfileAsync(() => _metadata.GetDatabaseAsync("scraper", CancellationToken.None));
+        record.Should().NotBeNull();
+        record!.Descriptor.Provider.Should().Be(DatabaseKind.Postgres);
+        record.Descriptor.Database.Should().Be("override_db");
+        record.Descriptor.DefaultSchema.Should().Be("es");
+        record.Descriptor.ReadOnly.Should().BeFalse();
+        // No SSL Mode in the string => Postgres natural default.
+        record.Descriptor.SslMode.Should().Be("Prefer");
+    }
+
+    [Fact]
     public async Task No_connections_configured_is_a_noop()
     {
         await CreateSeeder().SeedAsync(CancellationToken.None);
