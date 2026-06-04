@@ -197,6 +197,14 @@ checked against this list before merging.
 
 - Static process config: `appsettings.json` → env vars → user secrets,
   bound to `McpDatabaseQueryAppOptions`.
+- Pre-defined connections may be seeded at startup from
+  `McpDatabaseQueryApp:Connections` (a list of `PredefinedConnectionOptions`).
+  `PredefinedConnectionSeeder` runs inside `InitializeStoreAsync`, under the
+  default-profile scope, and upserts each entry by name through
+  `IMetadataStore` with the password encrypted via `ICredentialProtector`.
+  Seeding is idempotent and never aborts startup — a malformed or
+  un-encryptable entry is logged and skipped. Plaintext passwords live only in
+  process config (never in the SQLite row or any MCP payload).
 - Runtime metadata (pre-defined databases, saved scripts, cached result
   sets) lives in SQLite at `%APPDATA%/McpDatabaseQueryApp/mcp-database-query-app.db`, accessed via
   Dapper through `IMetadataStore`. Schema is migrated at startup by

@@ -140,6 +140,66 @@ encrypted with AES-256-GCM using a key resolved from
 Every setting above is overridable via environment variable using the
 double-underscore convention (`McpDatabaseQueryApp__ReadOnlyByDefault=true`).
 
+### Seeding pre-defined connections
+
+Normally connections are saved interactively (`db_predefined_create`, or the
+UI). For **headless deployments** — an MCP server launched by an orchestrator
+with no operator to click through setup — you can declare connections in
+configuration under `McpDatabaseQueryApp:Connections`. They are encrypted and
+upserted into the metadata store at startup, so the model can immediately
+`db_connect` to them by name.
+
+```jsonc
+{
+  "McpDatabaseQueryApp": {
+    "Secrets": { "KeyRef": "ENV:MCP_DATABASE_QUERY_APP_MASTER_KEY" },
+    "Connections": [
+      {
+        "Name": "scraper",
+        "Provider": "Postgres",
+        "Host": "db.internal",
+        "Port": 5432,
+        "Database": "etsy_listings",
+        "Username": "etsy",
+        "Password": "etsy_secret",
+        "SslMode": "Disable",
+        "ReadOnly": true,
+        "DefaultSchema": "es",
+        "Tags": ["scraper"]
+      }
+    ]
+  }
+}
+```
+
+The same, via environment variables (note the indexed `__0__` segments):
+
+```bash
+McpDatabaseQueryApp__Connections__0__Name=scraper
+McpDatabaseQueryApp__Connections__0__Provider=Postgres
+McpDatabaseQueryApp__Connections__0__Host=db.internal
+McpDatabaseQueryApp__Connections__0__Port=5432
+McpDatabaseQueryApp__Connections__0__Database=etsy_listings
+McpDatabaseQueryApp__Connections__0__Username=etsy
+McpDatabaseQueryApp__Connections__0__Password=etsy_secret
+McpDatabaseQueryApp__Connections__0__SslMode=Disable
+McpDatabaseQueryApp__Connections__0__ReadOnly=true
+McpDatabaseQueryApp__Connections__0__DefaultSchema=es
+```
+
+Notes:
+
+- **A master key is required.** Seeded passwords are encrypted with the key
+  resolved from `McpDatabaseQueryApp:Secrets:KeyRef`. If that key is missing,
+  the affected entry is logged and skipped (the server still starts).
+- Seeding is **idempotent** — entries are keyed by `Name`, so restarting
+  refreshes existing rows rather than duplicating them. Edit the config and
+  restart to update a connection.
+- `ReadOnly` defaults to `true` and `SslMode` defaults to `Require`; set
+  `SslMode=Disable` for local databases without TLS.
+- Required per entry: `Name`, `Provider`, `Host`, `Database`, `Username`,
+  `Password`. A malformed entry is skipped without aborting the others.
+
 ## Build from source
 
 Requires the .NET 10 SDK (10.0.201+) and Node.js 18+.

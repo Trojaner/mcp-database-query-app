@@ -1,6 +1,7 @@
 using McpDatabaseQueryApp.Apps;
 using McpDatabaseQueryApp.Core.Authorization;
 using McpDatabaseQueryApp.Core.Configuration;
+using McpDatabaseQueryApp.Core.Connections;
 using McpDatabaseQueryApp.Core.DataIsolation;
 using McpDatabaseQueryApp.Core.DependencyInjection;
 using McpDatabaseQueryApp.Core.Profiles;
@@ -220,6 +221,11 @@ static async Task InitializeStoreAsync(IServiceProvider services)
     // safety net for upgrade paths that ran v3 → v4 against an exotic schema state.
     var profiles = scope.ServiceProvider.GetRequiredService<IProfileStore>();
     await profiles.EnsureDefaultAsync(CancellationToken.None).ConfigureAwait(false);
+
+    // Seed connections declared in configuration (McpDatabaseQueryApp:Connections)
+    // so headless deployments come up with ready-to-use pre-defined databases.
+    var seeder = scope.ServiceProvider.GetRequiredService<PredefinedConnectionSeeder>();
+    await seeder.SeedAsync(CancellationToken.None).ConfigureAwait(false);
 }
 
 static async Task<IProfileScope> OpenDefaultProfileScopeAsync(IServiceProvider services)

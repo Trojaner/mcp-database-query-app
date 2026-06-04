@@ -33,6 +33,54 @@ public sealed class McpDatabaseQueryAppOptions
     public bool AutoConnect { get; set; } = true;
 
     public bool DangerouslySkipPermissions { get; set; }
+
+    /// <summary>
+    /// Pre-defined connections seeded into the metadata store at startup. Lets
+    /// headless deployments ship ready-to-use connections via configuration /
+    /// environment variables instead of an operator running
+    /// <c>db_predefined_create</c> interactively. Seeding is idempotent: each
+    /// entry is upserted by <see cref="PredefinedConnectionOptions.Name"/> under
+    /// the built-in default profile on every startup.
+    /// </summary>
+    public IList<PredefinedConnectionOptions> Connections { get; set; } = new List<PredefinedConnectionOptions>();
+}
+
+/// <summary>
+/// A single pre-defined connection declared in configuration. Mirrors the
+/// fields of <see cref="Connections.ConnectionDescriptor"/> plus the plaintext
+/// <see cref="Password"/>, which is encrypted before it is written to the
+/// metadata store and is never echoed back in any MCP payload.
+/// </summary>
+public sealed class PredefinedConnectionOptions
+{
+    /// <summary>Unique connection name; also the idempotency key for seeding.</summary>
+    public string? Name { get; set; }
+
+    /// <summary>Provider kind, parsed case-insensitively (e.g. <c>Postgres</c>, <c>SqlServer</c>).</summary>
+    public string? Provider { get; set; }
+
+    public string? Host { get; set; }
+
+    public int? Port { get; set; }
+
+    public string? Database { get; set; }
+
+    public string? Username { get; set; }
+
+    /// <summary>Plaintext password. Encrypted at rest; required to seed an entry.</summary>
+    public string? Password { get; set; }
+
+    /// <summary>SSL mode; defaults to <c>Require</c> when unset.</summary>
+    public string? SslMode { get; set; }
+
+    public bool? TrustServerCertificate { get; set; }
+
+    /// <summary>Whether the seeded connection is read-only. Defaults to <c>true</c>.</summary>
+    public bool ReadOnly { get; set; } = true;
+
+    public string? DefaultSchema { get; set; }
+
+    public IList<string> Tags { get; set; } = new List<string>();
 }
 
 public sealed class TransportOptions

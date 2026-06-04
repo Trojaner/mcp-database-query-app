@@ -57,6 +57,7 @@ public static class CoreServiceCollectionExtensions
         services.TryAddSingleton<IProviderRegistry, ProviderRegistry>();
         services.TryAddSingleton<ConnectionActivityTracker>();
         services.TryAddSingleton<IConnectionRegistry, ConnectionRegistry>();
+        services.TryAddSingleton<PredefinedConnectionSeeder>();
 
         return services;
     }
