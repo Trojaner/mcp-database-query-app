@@ -39,6 +39,7 @@ label {
     gap: 4px;
     color: var(--color-text-primary, CanvasText);
 }
+label.chk { gap: 5px; }
 select {
     padding: 4px 6px;
     font-size: 13px;
@@ -59,7 +60,58 @@ button {
     font-family: var(--font-sans, system-ui, sans-serif);
 }
 button:hover { filter: brightness(1.1); }
-button[hidden] { display: none; }
+button[hidden], [hidden] { display: none !important; }
+.advanced {
+    border: 1px solid var(--color-border-primary, #8884);
+    border-radius: var(--border-radius-sm, 4px);
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    background: var(--color-background-secondary, #8881);
+}
+.section-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    opacity: 0.7;
+}
+.series-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.series-row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+    font-size: 12px;
+}
+.series-row .series-name {
+    min-width: 120px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.series-swatch {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    display: inline-block;
+    flex: 0 0 auto;
+}
+.series-row.disabled .series-opts { opacity: 0.4; pointer-events: none; }
+.series-opts { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.forecast-row {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+    border-top: 1px dashed var(--color-border-secondary, #8883);
+    padding-top: 8px;
+}
 .chart-wrap {
     position: relative;
     flex: 1;
@@ -83,15 +135,28 @@ canvas { width: 100% !important; height: 100% !important; }
         <label>Chart type <select id="chartType">
             <option value="bar">Bar</option>
             <option value="line">Line</option>
+            <option value="area">Area</option>
+            <option value="scatter">Scatter</option>
             <option value="timeseries">Time series</option>
+            <option value="combo">Combo (bar + line)</option>
             <option value="pie">Pie</option>
             <option value="doughnut">Doughnut</option>
         </select></label>
         <label>X axis <select id="xAxis"></select></label>
-        <label>Y axis <select id="yAxis"></select></label>
+        <label class="chk" id="stackedWrap"><input type="checkbox" id="stacked" /> Stacked</label>
+        <button id="toggle-advanced" type="button" aria-expanded="false">Series &amp; axes ▾</button>
     </div>
     <button id="toggle-display" type="button" hidden>Maximize</button>
 </header>
+<div id="advanced" class="advanced" hidden>
+    <div class="section-title">Series</div>
+    <div id="seriesPanel" class="series-panel"></div>
+    <div class="forecast-row">
+        <label>Forecast flag <select id="forecastCol"><option value="">(none)</option></select></label>
+        <label>Band lower <select id="lowerCol"><option value="">(none)</option></select></label>
+        <label>Band upper <select id="upperCol"><option value="">(none)</option></select></label>
+    </div>
+</div>
 <div class="chart-wrap">
     <canvas id="chart"></canvas>
 </div>

@@ -68,7 +68,7 @@
     { "name": "db_ping", "description": "Check connectivity to a database." },
     { "name": "db_list_predefined", "description": "List predefined connection profiles." },
     { "name": "db_list_connections", "description": "List active connections." },
-    { "name": "db_query", "description": "Run a parameterised SELECT query." },
+    { "name": "db_query", "description": "Run a parameterised SELECT query. Optionally write results to a CSV file for large result sets." },
     { "name": "db_query_next_page", "description": "Fetch the next page of a paginated query." },
     { "name": "db_execute", "description": "Execute a non-query SQL statement." },
     { "name": "db_explain", "description": "Return the execution plan for a query." },
@@ -95,7 +95,7 @@
     { "name": "notes_list", "description": "List notes on database objects." },
     { "name": "notes_delete", "description": "Delete a note on a database object." },
     { "name": "db_builder_open", "description": "Open the interactive query builder UI." },
-    { "name": "ui_chart", "description": "Render a chart from a result set." },
+    { "name": "ui_chart", "description": "Render a chart from a result set: bar, line, area, scatter, timeseries, combo, pie or doughnut, with multiple series, dual axes, stacking, forecast segments and confidence bands." },
     { "name": "ui_schema_view", "description": "Open an interactive schema viewer." },
     { "name": "ui_results_export_csv", "description": "Export a result set to CSV." }
   ],

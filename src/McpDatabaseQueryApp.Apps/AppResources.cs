@@ -41,7 +41,7 @@ public sealed class AppResources
     };
 
     [McpServerResource(UriTemplate = ChartUri, Name = "chart_viewer", Title = "MCP Database Query App chart viewer", MimeType = MimeType)]
-    [Description("Chart.js visualization for query results supporting bar, line, pie, and doughnut chart types.")]
+    [Description("Chart.js visualization for query results supporting bar, line, area, scatter, timeseries, combo (bar+line), pie and doughnut charts — with multiple series, dual Y axes, stacking, dashed forecast segments and confidence bands.")]
     public TextResourceContents Chart() => new()
     {
         Uri = ChartUri,

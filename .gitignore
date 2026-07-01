@@ -26,3 +26,4 @@ appsettings.Local.json
 *.db-wal
 .claude
 *.lscachedata/
+*.lscache

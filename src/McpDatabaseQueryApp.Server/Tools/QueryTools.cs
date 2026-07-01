@@ -107,6 +107,52 @@ public sealed class QueryTools
             raw.TotalRowsAvailable,
             raw.ExecutionMs);
 
+        // CSV mode: stream the rows to a file instead of returning them inline,
+        // so large result sets don't have to travel through the model context.
+        // The row count is still bounded by the effective limit — callers who
+        // want the full table raise `limit` (or set limit=0 with
+        // confirm_unlimited) exactly as they would for an inline query.
+        if (!string.IsNullOrWhiteSpace(args.CsvPath))
+        {
+            var csvPath = PathResolver.Resolve(args.CsvPath);
+            var directory = Path.GetDirectoryName(csvPath);
+            if (!string.IsNullOrEmpty(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
+            await using (var stream = File.Create(csvPath))
+            await using (var writer = new StreamWriter(stream))
+            {
+                await CsvResultWriter.WriteAsync(
+                    writer,
+                    result.Columns.Select(c => c.Name),
+                    result.Rows,
+                    cancellationToken).ConfigureAwait(false);
+            }
+
+            var summary = new StringBuilder();
+            summary.Append("Wrote ").Append(result.RowCount)
+                .Append(result.RowCount == 1 ? " row to " : " rows to ").Append(csvPath);
+            if (truncated)
+            {
+                summary.Append(" (truncated at the row limit — raise `limit` to export more)");
+            }
+
+            summary.Append(" [").Append(result.ExecutionMs).Append(" ms]");
+
+            return new QueryToolResult(
+                args.ConnectionId,
+                result.Columns,
+                Rows: [],
+                result.RowCount,
+                result.Truncated,
+                result.ExecutionMs,
+                ResultSetId: null,
+                summary.ToString(),
+                csvPath);
+        }
+
         string? resultSetId = null;
         if (truncated)
         {
@@ -122,7 +168,8 @@ public sealed class QueryTools
             result.Truncated,
             result.ExecutionMs,
             resultSetId,
-            text);
+            text,
+            CsvPath: null);
         }, _logger).ConfigureAwait(false);
     }
 
@@ -335,6 +382,9 @@ public sealed class QueryToolArgs
 
     [Description("Set to true to confirm unlimited (limit=0) results.")]
     public bool ConfirmUnlimited { get; set; }
+
+    [Description("When set, write the result rows to this CSV file (RFC 4180) instead of returning them inline. Use for large result sets. Relative paths resolve against the server's working directory; raise `limit` (or limit=0 with confirm_unlimited) to control how many rows are exported.")]
+    public string? CsvPath { get; set; }
 }
 
 public sealed class ExecuteArgs
@@ -368,7 +418,8 @@ public sealed record QueryToolResult(
     bool Truncated,
     long ExecutionMs,
     string? ResultSetId,
-    string TextTable);
+    string TextTable,
+    string? CsvPath);
 
 public sealed record QueryPageResult(
     string ResultSetId,

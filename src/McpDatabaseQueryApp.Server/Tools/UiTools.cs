@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using McpDatabaseQueryApp.Core.Results;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
 
@@ -37,10 +38,10 @@ public sealed class UiTools
         ArgumentNullException.ThrowIfNull(columns);
         ArgumentNullException.ThrowIfNull(rows);
         var sb = new System.Text.StringBuilder();
-        sb.Append(string.Join(',', columns.Select(EscapeCsv))).Append('\n');
+        sb.Append(string.Join(',', columns.Select(CsvResultWriter.Escape))).Append('\n');
         foreach (var row in rows)
         {
-            sb.Append(string.Join(',', row.Select(cell => EscapeCsv(cell?.ToString() ?? string.Empty)))).Append('\n');
+            sb.Append(string.Join(',', row.Select(cell => CsvResultWriter.Escape(cell?.ToString() ?? string.Empty)))).Append('\n');
         }
 
         return new UiCsvResult(sb.ToString(), rows.Count);
@@ -49,14 +50,20 @@ public sealed class UiTools
 
     [McpServerTool(Name = "ui_chart", ReadOnly = true)]
     [McpMeta("ui", JsonValue = "{\"resourceUri\":\"ui://mcp-database-query-app/chart.html\",\"visibility\":[\"model\",\"app\"]}")]
-    [Description("Opens a Chart.js visualization for the supplied result set. Pass columns and rows from a prior db_query call.")]
+    [Description("Opens a Chart.js visualization for the supplied result set. Supports bar, line, area, scatter, timeseries, combo (mixed bar+line), pie and doughnut charts — with multiple series, a secondary Y axis, stacking, dashed/forecast segments and confidence bands. Pass columns and rows from a prior db_query call.")]
     public OpenChartResult OpenChart(
         string connectionId,
-        [Description("Chart type: bar, line, timeseries, pie, doughnut. Use timeseries when the X axis is a date/timestamp.")] string chartType,
+        [Description("Chart type: bar, line, area, scatter, timeseries, combo, pie, doughnut. Use timeseries when the X axis is a date/timestamp; combo mixes bar and line series.")] string chartType,
         [Description("Column names in result-set order. Must align with each row.")] IReadOnlyList<string> columns,
         [Description("Row values. Each row must have the same length as columns.")] IReadOnlyList<IReadOnlyList<object?>> rows,
-        [Description("Column name to use as the X axis. Defaults to the first column.")] string? xAxis = null,
-        [Description("Column name to use as the Y axis. Defaults to the second column.")] string? yAxis = null)
+        [Description("Column for the X axis (categories, or the time axis for timeseries). Defaults to the first column.")] string? xAxis = null,
+        [Description("Column for a single Y series. Defaults to the first numeric column. Ignored when yAxes or series is set.")] string? yAxis = null,
+        [Description("Multiple Y columns to plot as separate series (multi-line or grouped/stacked bars). Ignored when series is set.")] IReadOnlyList<string>? yAxes = null,
+        [Description("Full per-series control (column, label, type=line|bar, axis=left|right, dashed, fill, color). Overrides yAxis/yAxes when provided.")] IReadOnlyList<ChartSeriesSpec>? series = null,
+        [Description("Stack bars/areas cumulatively instead of drawing them side by side.")] bool stacked = false,
+        [Description("Boolean/flag column marking forecast rows; those trailing segments are drawn dashed to distinguish projection from history.")] string? forecastColumn = null,
+        [Description("Numeric column holding the lower confidence bound; shaded together with upperBoundColumn as a band behind the first series.")] string? lowerBoundColumn = null,
+        [Description("Numeric column holding the upper confidence bound; pair with lowerBoundColumn.")] string? upperBoundColumn = null)
     {
         return ToolErrorHandler.Wrap(() =>
         {
@@ -72,7 +79,13 @@ public sealed class UiTools
                 rows,
                 rows.Count,
                 xAxis,
-                yAxis);
+                yAxis,
+                yAxes,
+                series,
+                stacked,
+                forecastColumn,
+                lowerBoundColumn,
+                upperBoundColumn);
         }, _logger);
     }
 
@@ -87,18 +100,38 @@ public sealed class UiTools
             "Launching schema viewer. In a text-only client, use db_describe_batch to explore the schema."), _logger);
     }
 
-    private static string EscapeCsv(string value)
-    {
-        if (value.Contains(',', StringComparison.Ordinal) || value.Contains('"', StringComparison.Ordinal) || value.Contains('\n', StringComparison.Ordinal))
-        {
-            return '"' + value.Replace("\"", "\"\"", StringComparison.Ordinal) + '"';
-        }
-
-        return value;
-    }
 }
 
 public sealed record OpenUiResult(string ResourceUri, string ConnectionId, string TextFallback);
+
+/// <summary>
+/// One series in a <c>ui_chart</c> <c>series</c> list. Every field beyond
+/// <see cref="Column"/> is optional; the interactive UI exposes the same knobs
+/// so the user can tweak whatever the model picked.
+/// </summary>
+public sealed class ChartSeriesSpec
+{
+    [Description("Result-set column supplying this series' values.")]
+    public required string Column { get; set; }
+
+    [Description("Legend label. Defaults to the column name.")]
+    public string? Label { get; set; }
+
+    [Description("Per-series render type for combo charts: line or bar. Defaults to the chart's type.")]
+    public string? Type { get; set; }
+
+    [Description("Which Y axis to bind to: left (default) or right (secondary axis).")]
+    public string? Axis { get; set; }
+
+    [Description("Draw the whole series with a dashed stroke.")]
+    public bool Dashed { get; set; }
+
+    [Description("Fill the area under a line series.")]
+    public bool Fill { get; set; }
+
+    [Description("Explicit CSS color (e.g. #4e79a7). Defaults to a palette color.")]
+    public string? Color { get; set; }
+}
 
 public sealed record OpenChartResult(
     string ResourceUri,
@@ -109,7 +142,13 @@ public sealed record OpenChartResult(
     IReadOnlyList<IReadOnlyList<object?>> Rows,
     int RowCount,
     string? XAxis,
-    string? YAxis);
+    string? YAxis,
+    IReadOnlyList<string>? YAxes,
+    IReadOnlyList<ChartSeriesSpec>? Series,
+    bool Stacked,
+    string? ForecastColumn,
+    string? LowerBoundColumn,
+    string? UpperBoundColumn);
 
 public sealed record ChartColumn(string Name, string? DataType);
 

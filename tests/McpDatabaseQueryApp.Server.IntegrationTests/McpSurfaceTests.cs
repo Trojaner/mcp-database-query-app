@@ -53,6 +53,7 @@ public sealed class McpSurfaceTests
             "scripts_delete",
             "scripts_run",
             "db_builder_open",
+            "ui_chart",
             "ui_results_export_csv",
         ]);
     }
