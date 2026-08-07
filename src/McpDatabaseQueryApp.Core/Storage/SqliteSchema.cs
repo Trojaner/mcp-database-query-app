@@ -7,7 +7,7 @@ namespace McpDatabaseQueryApp.Core.Storage;
 
 public static class SqliteSchema
 {
-    public const int CurrentVersion = 6;
+    public const int CurrentVersion = 7;
 
     public static async Task EnsureCreatedAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
@@ -59,6 +59,47 @@ public static class SqliteSchema
             await ApplyV6Async(connection, cancellationToken).ConfigureAwait(false);
             await StampAsync(connection, 6, cancellationToken).ConfigureAwait(false);
         }
+
+        if (version < 7)
+        {
+            await ApplyV7Async(connection, cancellationToken).ConfigureAwait(false);
+            await StampAsync(connection, 7, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// v7 — durable store for the MCP tasks extension (2026-07-28 moved tasks out of
+    /// the core protocol into <c>io.modelcontextprotocol/tasks</c>).
+    /// </summary>
+    /// <remarks>
+    /// Tasks are persisted rather than held in memory so a client polling <c>tasks/get</c>
+    /// still gets a truthful answer after a server restart. Execution itself cannot span a
+    /// restart, so rows left in <c>working</c> by a crash are reconciled to <c>failed</c> at
+    /// startup — see <c>FailInterruptedTasksAsync</c>. <c>expires_at</c> bounds growth and is
+    /// swept by the task janitor, mirroring how <c>result_sets</c> is handled.
+    /// </remarks>
+    private static async Task ApplyV7Async(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        const string ddl = """
+            CREATE TABLE IF NOT EXISTS mcp_tasks (
+                task_id TEXT NOT NULL PRIMARY KEY,
+                profile_id TEXT NOT NULL,
+                state TEXT NOT NULL,
+                status_message TEXT NULL,
+                created_at TEXT NOT NULL,
+                last_updated_at TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                poll_interval_ms INTEGER NOT NULL,
+                result_json TEXT NULL,
+                error_json TEXT NULL,
+                input_requests_json TEXT NULL
+            );
+            CREATE INDEX IF NOT EXISTS ix_mcp_tasks_expires_at ON mcp_tasks (expires_at);
+            CREATE INDEX IF NOT EXISTS ix_mcp_tasks_profile ON mcp_tasks (profile_id);
+            CREATE INDEX IF NOT EXISTS ix_mcp_tasks_state ON mcp_tasks (state);
+            """;
+
+        await connection.ExecuteAsync(new CommandDefinition(ddl, cancellationToken: cancellationToken)).ConfigureAwait(false);
     }
 
     private static async Task StampAsync(SqliteConnection connection, int version, CancellationToken cancellationToken)

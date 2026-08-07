@@ -7,21 +7,25 @@ namespace McpDatabaseQueryApp.Server.Elicitation;
 
 /// <summary>
 /// MCP-bound implementation of <see cref="IDestructiveOperationConfirmer"/>.
-/// Reads the current <see cref="IMcpServer"/> off
+/// Reads the current tool <see cref="RequestContext{TParams}"/> off
 /// <see cref="QueryExecutionContext.Items"/> at the entry-point key
 /// <see cref="ContextKey"/> (set by the calling tool), then drives the
-/// existing <see cref="IElicitationGateway"/> form prompt.
+/// <see cref="IElicitationGateway"/> form prompt.
 /// </summary>
 /// <remarks>
-/// Passing the server through <c>Items</c> avoids needing a per-request
+/// Passing the request context through <c>Items</c> avoids needing a per-request
 /// <see cref="AsyncLocal{T}"/> accessor while still keeping Core free of the
-/// MCP SDK. <see cref="QueryExecutionPipelineRunner"/> wraps the assignment
-/// so individual tools never touch the key directly.
+/// MCP SDK. The full request context (rather than just the <see cref="McpServer"/>)
+/// is required because the multi round-trip request pattern reads the user's answer
+/// from <c>Params.InputResponses</c> on the replayed call.
 /// </remarks>
 public sealed class McpDestructiveOperationConfirmer : IDestructiveOperationConfirmer
 {
-    /// <summary>Key used to stash the current <see cref="IMcpServer"/> on the context.</summary>
-    public const string ContextKey = "McpServer";
+    /// <summary>Key used to stash the current tool request context on the pipeline context.</summary>
+    public const string ContextKey = "McpRequestContext";
+
+    /// <summary>MRTR input key for the destructive-batch confirmation prompt.</summary>
+    public const string InputKey = "confirm_destructive";
 
     private readonly IElicitationGateway _elicitation;
     private readonly IQueryExecutionContextAccessor _accessor;
@@ -44,18 +48,18 @@ public sealed class McpDestructiveOperationConfirmer : IDestructiveOperationConf
         var context = _accessor.Current;
         if (context is null
             || !context.Items.TryGetValue(ContextKey, out var raw)
-            || raw is not McpServer server)
+            || raw is not RequestContext<CallToolRequestParams> requestContext)
         {
             return null;
         }
 
-        if (!_elicitation.ClientSupportsForm(server))
+        if (!_elicitation.CanElicit(requestContext))
         {
             return null;
         }
 
         var message = BuildMessage(statements);
-        var ok = await _elicitation.ConfirmAsync(server, message, cancellationToken).ConfigureAwait(false);
+        var ok = await _elicitation.ConfirmAsync(requestContext, InputKey, message, cancellationToken).ConfigureAwait(false);
         return ok;
     }
 

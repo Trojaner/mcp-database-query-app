@@ -7,6 +7,7 @@ using McpDatabaseQueryApp.Core.Notes;
 using McpDatabaseQueryApp.Core.Profiles;
 using McpDatabaseQueryApp.Core.Results;
 using McpDatabaseQueryApp.Core.Scripts;
+using McpDatabaseQueryApp.Core.Tasks;
 using Microsoft.Data.Sqlite;
 
 namespace McpDatabaseQueryApp.Core.Storage;
@@ -608,4 +609,142 @@ public sealed class SqliteMetadataStore : IMetadataStore
         public string updated_at { get; set; } = string.Empty;
     }
 #pragma warning restore IDE1006, SA1300, CA1812
+
+    // --- MCP tasks extension (io.modelcontextprotocol/tasks) ---
+
+    private const string TaskColumns =
+        "task_id, profile_id, state, status_message, created_at, last_updated_at, expires_at, poll_interval_ms, result_json, error_json, input_requests_json";
+
+    /// <inheritdoc/>
+    public async Task InsertTaskAsync(McpTaskRecord record, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await connection.ExecuteAsync(new CommandDefinition(
+            $"INSERT INTO mcp_tasks ({TaskColumns}) VALUES (@task_id, @profile_id, @state, @status_message, @created_at, @last_updated_at, @expires_at, @poll_interval_ms, @result_json, @error_json, @input_requests_json);",
+            ToParameters(record),
+            cancellationToken: cancellationToken)).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public async Task<McpTaskRecord?> GetTaskAsync(string taskId, string? profileId, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(taskId);
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+
+        // A null profileId means "internal caller with no request scope" (the background
+        // execution continuation completing its own task). Client-facing reads always pass
+        // a profile so a handle from one profile cannot be resolved under another.
+        var sql = profileId is null
+            ? $"SELECT {TaskColumns} FROM mcp_tasks WHERE task_id = @task_id;"
+            : $"SELECT {TaskColumns} FROM mcp_tasks WHERE task_id = @task_id AND profile_id = @profile_id;";
+
+        var row = await connection.QuerySingleOrDefaultAsync<TaskRow>(new CommandDefinition(
+            sql,
+            new { task_id = taskId, profile_id = profileId },
+            cancellationToken: cancellationToken)).ConfigureAwait(false);
+
+        return row is null ? null : MapTask(row);
+    }
+
+    /// <inheritdoc/>
+    public async Task<bool> UpdateTaskAsync(McpTaskRecord record, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        var affected = await connection.ExecuteAsync(new CommandDefinition(
+            """
+            UPDATE mcp_tasks
+               SET state = @state,
+                   status_message = @status_message,
+                   last_updated_at = @last_updated_at,
+                   expires_at = @expires_at,
+                   poll_interval_ms = @poll_interval_ms,
+                   result_json = @result_json,
+                   error_json = @error_json,
+                   input_requests_json = @input_requests_json
+             WHERE task_id = @task_id;
+            """,
+            ToParameters(record),
+            cancellationToken: cancellationToken)).ConfigureAwait(false);
+
+        return affected > 0;
+    }
+
+    /// <inheritdoc/>
+    public async Task<int> PurgeExpiredTasksAsync(DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        // Like the result-set purge, this is a global background sweep with no profile scope.
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        return await connection.ExecuteAsync(new CommandDefinition(
+            "DELETE FROM mcp_tasks WHERE expires_at <= @now;",
+            new { now = now.ToString("O", CultureInfo.InvariantCulture) },
+            cancellationToken: cancellationToken)).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public async Task<int> FailInterruptedTasksAsync(string reason, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        return await connection.ExecuteAsync(new CommandDefinition(
+            """
+            UPDATE mcp_tasks
+               SET state = @failed,
+                   status_message = @reason,
+                   last_updated_at = @now
+             WHERE state IN (@working, @input_required);
+            """,
+            new
+            {
+                failed = nameof(McpTaskState.Failed),
+                working = nameof(McpTaskState.Working),
+                input_required = nameof(McpTaskState.InputRequired),
+                reason,
+                now = now.ToString("O", CultureInfo.InvariantCulture),
+            },
+            cancellationToken: cancellationToken)).ConfigureAwait(false);
+    }
+
+    private static object ToParameters(McpTaskRecord record) => new
+    {
+        task_id = record.TaskId,
+        profile_id = record.ProfileId,
+        state = record.State.ToString(),
+        status_message = record.StatusMessage,
+        created_at = record.CreatedAt.ToString("O", CultureInfo.InvariantCulture),
+        last_updated_at = record.LastUpdatedAt.ToString("O", CultureInfo.InvariantCulture),
+        expires_at = record.ExpiresAt.ToString("O", CultureInfo.InvariantCulture),
+        poll_interval_ms = record.PollIntervalMs,
+        result_json = record.ResultJson,
+        error_json = record.ErrorJson,
+        input_requests_json = record.InputRequestsJson,
+    };
+
+    private static McpTaskRecord MapTask(TaskRow row) => new(
+        row.task_id,
+        row.profile_id,
+        Enum.TryParse<McpTaskState>(row.state, ignoreCase: true, out var state) ? state : McpTaskState.Failed,
+        row.status_message,
+        DateTimeOffset.Parse(row.created_at, CultureInfo.InvariantCulture),
+        DateTimeOffset.Parse(row.last_updated_at, CultureInfo.InvariantCulture),
+        DateTimeOffset.Parse(row.expires_at, CultureInfo.InvariantCulture),
+        row.poll_interval_ms,
+        row.result_json,
+        row.error_json,
+        row.input_requests_json);
+
+    private sealed class TaskRow
+    {
+        public string task_id { get; set; } = string.Empty;
+        public string profile_id { get; set; } = string.Empty;
+        public string state { get; set; } = string.Empty;
+        public string? status_message { get; set; }
+        public string created_at { get; set; } = string.Empty;
+        public string last_updated_at { get; set; } = string.Empty;
+        public string expires_at { get; set; } = string.Empty;
+        public long poll_interval_ms { get; set; }
+        public string? result_json { get; set; }
+        public string? error_json { get; set; }
+        public string? input_requests_json { get; set; }
+    }
 }

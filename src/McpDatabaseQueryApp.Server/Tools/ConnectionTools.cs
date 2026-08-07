@@ -8,6 +8,7 @@ using McpDatabaseQueryApp.Server.Elicitation;
 using McpDatabaseQueryApp.Server.Metadata;
 using McpDatabaseQueryApp.Server.Pagination;
 using Microsoft.Extensions.Logging;
+using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 
 namespace McpDatabaseQueryApp.Server.Tools;
@@ -72,7 +73,7 @@ public sealed class ConnectionTools
     [McpServerTool(Name = "db_connect", Destructive = false)]
     [Description("Opens a database connection. Provide a pre-defined 'name' or an ad-hoc descriptor. Passwords must be set out-of-band via db_predefined_create.")]
     public async Task<ConnectResult> ConnectAsync(
-        McpServer server,
+        RequestContext<CallToolRequestParams> context,
         ConnectArgs args,
         CancellationToken cancellationToken)
     {

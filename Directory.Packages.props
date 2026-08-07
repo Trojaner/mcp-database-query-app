@@ -5,52 +5,74 @@
 
   <ItemGroup>
     <!-- MCP -->
-    <PackageVersion Include="ModelContextProtocol" Version="1.2.0" />
-    <PackageVersion Include="ModelContextProtocol.Core" Version="1.2.0" />
-    <PackageVersion Include="ModelContextProtocol.AspNetCore" Version="1.2.0" />
+    <PackageVersion Include="ModelContextProtocol" Version="2.1.0" />
+    <PackageVersion Include="ModelContextProtocol.Core" Version="2.1.0" />
+    <PackageVersion Include="ModelContextProtocol.AspNetCore" Version="2.1.0" />
+    <!-- Official MCP extensions (2026-07-28 moved tasks out of the core protocol). -->
+    <PackageVersion Include="ModelContextProtocol.Extensions.Tasks" Version="2.1.0" />
+    <PackageVersion Include="ModelContextProtocol.Extensions.Apps" Version="2.1.0" />
 
     <!-- Authentication -->
-    <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.5" />
-    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.5" />
-    <PackageVersion Include="System.IdentityModel.Tokens.Jwt" Version="8.16.0" />
+    <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.10" />
+    <!-- Transitive pin: Microsoft.AspNetCore.OpenApi 10.0.10 resolves Microsoft.OpenApi
+         2.0.0, which carries a high-severity advisory (GHSA-v5pm-xwqc-g5wc — circular
+         schema references can terminate OpenAPI parsing). 2.7.5 is the first patched
+         release on the 2.x line. Staying on 2.x deliberately: Microsoft.OpenApi 3.x is
+         a breaking API rewrite that Microsoft.AspNetCore.OpenApi 10.x does not target. -->
+    <PackageVersion Include="Microsoft.OpenApi" Version="2.7.5" />
+    <PackageVersion Include="System.IdentityModel.Tokens.Jwt" Version="8.22.0" />
 
     <!-- Hosting / Configuration -->
-    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.5" />
-    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.5" />
-    <PackageVersion Include="Microsoft.Extensions.Configuration" Version="10.0.5" />
-    <PackageVersion Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.5" />
-    <PackageVersion Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="10.0.5" />
-    <PackageVersion Include="Microsoft.Extensions.Configuration.Json" Version="10.0.5" />
-    <PackageVersion Include="Microsoft.Extensions.Configuration.UserSecrets" Version="10.0.5" />
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.5" />
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.5" />
-    <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.5" />
-    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.5" />
-    <PackageVersion Include="Microsoft.Extensions.Logging.Console" Version="10.0.5" />
-    <PackageVersion Include="Microsoft.Extensions.Options" Version="10.0.5" />
-    <PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.5" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.Json" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.UserSecrets" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Console" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.Options" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.10" />
 
     <!-- Data access -->
-    <PackageVersion Include="Dapper" Version="2.1.72" />
-    <PackageVersion Include="Dapper.AOT" Version="1.0.48" />
-    <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.5" />
-    <PackageVersion Include="Npgsql" Version="10.0.2" />
-    <PackageVersion Include="Microsoft.Data.SqlClient" Version="7.0.0" />
+    <PackageVersion Include="Dapper" Version="2.1.79" />
+    <PackageVersion Include="Dapper.AOT" Version="1.0.52" />
+    <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.10" />
+    <!-- Transitive pin: Microsoft.Data.Sqlite 10.0.10 still resolves the native shim
+         SQLitePCLRaw.lib.e_sqlite3 2.1.11, which NuGet audit flags as NU1903
+         (GHSA-2m69-gcr7-jv3q). 2.1.12 is the patched build on the same 2.x line, so
+         this fixes the advisory rather than suppressing it, and keeps the managed
+         SQLitePCLRaw.core/bundle/provider packages on the 2.x API that
+         Microsoft.Data.Sqlite is built against. Do not jump to the 3.x line here:
+         3.x re-cut the packages (bundle 3.0.5 depends on a new "SQLite" package
+         instead of lib.e_sqlite3), which is a migration, not a version bump. -->
+    <PackageVersion Include="SQLitePCLRaw.lib.e_sqlite3" Version="2.1.12" />
+    <PackageVersion Include="Npgsql" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.Data.SqlClient" Version="7.0.2" />
 
     <!-- SQL parsing -->
-    <PackageVersion Include="Microsoft.SqlServer.TransactSql.ScriptDom" Version="180.6.0" />
+    <PackageVersion Include="Microsoft.SqlServer.TransactSql.ScriptDom" Version="180.78.1" />
     <PackageVersion Include="pgsqlparser" Version="1.0.0" />
 
     <!-- Tests -->
-    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.5" />
-    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
     <PackageVersion Include="xunit" Version="2.9.3" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
+    <!-- FluentAssertions is deliberately held at 7.x: version 8.0.0 relicensed to the
+         Xceed Community License, which requires a paid licence for commercial use.
+         7.2.0 is the last Apache-2.0 release. Bump only after a licence decision;
+         the drop-in alternative is AwesomeAssertions (Apache-2.0 fork of 7.x). -->
     <PackageVersion Include="FluentAssertions" Version="7.2.0" />
-    <PackageVersion Include="Testcontainers" Version="4.11.0" />
-    <PackageVersion Include="Xunit.SkippableFact" Version="1.5.23" />
-    <PackageVersion Include="Testcontainers.PostgreSql" Version="4.11.0" />
-    <PackageVersion Include="Testcontainers.MsSql" Version="4.11.0" />
-    <PackageVersion Include="coverlet.collector" Version="6.0.4" />
+    <PackageVersion Include="Testcontainers" Version="4.13.0" />
+    <PackageVersion Include="Xunit.SkippableFact" Version="1.5.61" />
+    <PackageVersion Include="Testcontainers.PostgreSql" Version="4.13.0" />
+    <PackageVersion Include="Testcontainers.MsSql" Version="4.13.0" />
+    <PackageVersion Include="coverlet.collector" Version="10.0.1" />
   </ItemGroup>
 </Project>

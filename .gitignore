@@ -27,3 +27,4 @@ appsettings.Local.json
 .claude
 *.lscachedata/
 *.lscache
+.DS_Store

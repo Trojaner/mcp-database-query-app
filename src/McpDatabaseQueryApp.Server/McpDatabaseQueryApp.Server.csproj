@@ -11,9 +11,21 @@
     <EnableConfigurationBindingGenerator>true</EnableConfigurationBindingGenerator>
     <EnableRequestDelegateGenerator>true</EnableRequestDelegateGenerator>
 
-    <!-- Suppress warnings we cannot fix without upstream library changes.
-         Re-enable after auditing IL2026/IL3050 output on publish. -->
+    <!-- IL2026/IL3050: two deliberate reflection-based JSON sites —
+         (1) the trailing DefaultJsonTypeInfoResolver in Program.cs, kept as a fallback for
+             `object?` query-row values that cannot be described statically, and
+         (2) JsonSerializer.Serialize(value, options) in Resources/McpDatabaseQueryAppResources.cs.
+         Scoped to this project with the sources named, rather than blanket-suppressed across
+         every non-test project as before, so new AOT-unsafe code elsewhere still fails the
+         build.
+
+         IL2104 ("assembly produced trim warnings") is suppressed only here, and only because
+         it is raised for third-party assemblies we do not control — Dapper,
+         Microsoft.Data.SqlClient and System.Configuration.ConfigurationManager. Native AOT
+         publish fails without it. -->
     <NoWarn>$(NoWarn);IL2026;IL3050;IL2104</NoWarn>
+
+
   </PropertyGroup>
 
   <!-- Reflection-based JSON is required by ModelContextProtocol tool discovery
@@ -36,6 +48,8 @@
   <ItemGroup>
     <PackageReference Include="ModelContextProtocol" />
     <PackageReference Include="ModelContextProtocol.AspNetCore" />
+    <PackageReference Include="ModelContextProtocol.Extensions.Tasks" />
+    <PackageReference Include="ModelContextProtocol.Extensions.Apps" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
     <PackageReference Include="Dapper.AOT" />

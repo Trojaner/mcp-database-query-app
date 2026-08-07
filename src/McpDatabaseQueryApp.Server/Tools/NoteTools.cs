@@ -4,6 +4,7 @@ using McpDatabaseQueryApp.Core.Notes;
 using McpDatabaseQueryApp.Server.Elicitation;
 using McpDatabaseQueryApp.Server.Pagination;
 using Microsoft.Extensions.Logging;
+using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 
 namespace McpDatabaseQueryApp.Server.Tools;
@@ -86,7 +87,7 @@ public sealed class NoteTools
     [McpServerTool(Name = "notes_delete", Destructive = true)]
     [Description("Deletes a note from a database object.")]
     public async Task<NoteDeleteResult> DeleteAsync(
-        McpServer server,
+        RequestContext<CallToolRequestParams> context,
         [Description("Target type: Database, Schema, Table, Column, or Connection.")] string targetType,
         [Description("Hierarchical path of the target.")] string targetPath,
         [Description("Skip confirmation. Only effective with --dangerously-skip-permissions.")] bool confirm,
@@ -98,7 +99,7 @@ public sealed class NoteTools
 
         if (!_mutationGuard.ShouldSkipElicitation(confirm))
         {
-            var ok = await _elicitation.ConfirmAsync(server, $"Delete note on {targetType} '{targetPath}'?", cancellationToken).ConfigureAwait(false);
+            var ok = await _elicitation.ConfirmAsync(context, "confirm_delete_note", $"Delete note on {targetType} '{targetPath}'?", cancellationToken).ConfigureAwait(false);
             if (!ok)
             {
                 return new NoteDeleteResult(targetType, targetPath, Deleted: false);

@@ -73,7 +73,7 @@ public sealed class ScriptTools
 
     [McpServerTool(Name = "scripts_create")]
     [Description("Creates a new saved SQL script. Rejects if the name already exists.")]
-    public async Task<ScriptRecord> CreateAsync(McpServer server, ScriptArgs args, CancellationToken cancellationToken)
+    public async Task<ScriptRecord> CreateAsync(RequestContext<CallToolRequestParams> context, ScriptArgs args, CancellationToken cancellationToken)
     {
         return await ToolErrorHandler.WrapAsync(async () =>
         {
@@ -86,7 +86,7 @@ public sealed class ScriptTools
 
         var record = Build(args);
         var result = await _scripts.UpsertAsync(record, cancellationToken).ConfigureAwait(false);
-        await server.SendNotificationAsync(NotificationMethods.PromptListChangedNotification, new PromptListChangedNotificationParams()).ConfigureAwait(false);
+        await context.Server.SendNotificationAsync(NotificationMethods.PromptListChangedNotification, new PromptListChangedNotificationParams()).ConfigureAwait(false);
         return result;
         }, _logger).ConfigureAwait(false);
     }
@@ -94,7 +94,7 @@ public sealed class ScriptTools
     [McpServerTool(Name = "scripts_update")]
     [Description("Updates an existing saved SQL script.")]
     public async Task<ScriptRecord> UpdateAsync(
-        McpServer server,
+        RequestContext<CallToolRequestParams> context,
         ScriptArgs args,
         CancellationToken cancellationToken)
     {
@@ -105,7 +105,7 @@ public sealed class ScriptTools
             ?? throw new KeyNotFoundException($"Script '{args.Name}' not found.");
         var updated = Build(args) with { Id = existing.Id, CreatedAt = existing.CreatedAt, UpdatedAt = DateTimeOffset.UtcNow };
         var result = await _scripts.UpsertAsync(updated, cancellationToken).ConfigureAwait(false);
-        await server.SendNotificationAsync(NotificationMethods.PromptListChangedNotification, new PromptListChangedNotificationParams()).ConfigureAwait(false);
+        await context.Server.SendNotificationAsync(NotificationMethods.PromptListChangedNotification, new PromptListChangedNotificationParams()).ConfigureAwait(false);
         return result;
         }, _logger).ConfigureAwait(false);
     }
@@ -113,7 +113,7 @@ public sealed class ScriptTools
     [McpServerTool(Name = "scripts_delete", Destructive = true)]
     [Description("Deletes a saved SQL script. Elicits a confirmation unless confirm=true.")]
     public async Task<DeleteResult> DeleteAsync(
-        McpServer server,
+        RequestContext<CallToolRequestParams> context,
         string nameOrId,
         [Description("Skip confirmation. Only effective with --dangerously-skip-permissions.")] bool confirm,
         CancellationToken cancellationToken)
@@ -128,7 +128,7 @@ public sealed class ScriptTools
 
         if (!_mutationGuard.ShouldSkipElicitation(confirm))
         {
-            var ok = await _elicitation.ConfirmAsync(server, $"Delete script '{existing.Name}'?", cancellationToken).ConfigureAwait(false);
+            var ok = await _elicitation.ConfirmAsync(context, "confirm_delete_script", $"Delete script '{existing.Name}'?", cancellationToken).ConfigureAwait(false);
             if (!ok)
             {
                 return new DeleteResult(nameOrId, Deleted: false);
@@ -138,7 +138,7 @@ public sealed class ScriptTools
         var deleted = await _scripts.DeleteAsync(nameOrId, cancellationToken).ConfigureAwait(false);
         if (deleted)
         {
-            await server.SendNotificationAsync(NotificationMethods.PromptListChangedNotification, new PromptListChangedNotificationParams()).ConfigureAwait(false);
+            await context.Server.SendNotificationAsync(NotificationMethods.PromptListChangedNotification, new PromptListChangedNotificationParams()).ConfigureAwait(false);
         }
 
         return new DeleteResult(nameOrId, deleted);
@@ -148,7 +148,7 @@ public sealed class ScriptTools
     [McpServerTool(Name = "scripts_run", Destructive = true)]
     [Description("Executes a saved SQL script against a connection. Destructive scripts require confirmation.")]
     public async Task<ScriptRunResult> RunAsync(
-        McpServer server,
+        RequestContext<CallToolRequestParams> context,
         string nameOrId,
         string connectionId,
         [Description("Skip confirmation. Only effective with --dangerously-skip-permissions.")] bool confirm,
@@ -189,7 +189,7 @@ public sealed class ScriptTools
             mode,
             confirmDestructive: confirm,
             confirmUnlimited: false);
-        pipelineContext.Items[McpDestructiveOperationConfirmer.ContextKey] = server;
+        pipelineContext.Items[McpDestructiveOperationConfirmer.ContextKey] = context;
 
         try
         {

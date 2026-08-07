@@ -113,6 +113,11 @@ public sealed class ConnectionRegistryTests
     private sealed class FakeMetadata : IMetadataStore
     {
         public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task InsertTaskAsync(McpDatabaseQueryApp.Core.Tasks.McpTaskRecord record, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task<McpDatabaseQueryApp.Core.Tasks.McpTaskRecord?> GetTaskAsync(string taskId, string? profileId, CancellationToken cancellationToken) => Task.FromResult<McpDatabaseQueryApp.Core.Tasks.McpTaskRecord?>(null);
+        public Task<bool> UpdateTaskAsync(McpDatabaseQueryApp.Core.Tasks.McpTaskRecord record, CancellationToken cancellationToken) => Task.FromResult(false);
+        public Task<int> PurgeExpiredTasksAsync(DateTimeOffset now, CancellationToken cancellationToken) => Task.FromResult(0);
+        public Task<int> FailInterruptedTasksAsync(string reason, DateTimeOffset now, CancellationToken cancellationToken) => Task.FromResult(0);
         public Task<DatabaseRecord?> GetDatabaseAsync(string nameOrId, CancellationToken cancellationToken) => Task.FromResult<DatabaseRecord?>(null);
         public Task<(IReadOnlyList<ConnectionDescriptor> Items, long Total)> ListDatabasesAsync(int offset, int limit, string? filter, CancellationToken cancellationToken) => Task.FromResult(((IReadOnlyList<ConnectionDescriptor>)Array.Empty<ConnectionDescriptor>(), 0L));
         public Task<ConnectionDescriptor> UpsertDatabaseAsync(ConnectionDescriptor descriptor, byte[] passwordCipher, byte[] passwordNonce, CancellationToken cancellationToken) => Task.FromResult(descriptor);

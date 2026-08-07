@@ -8,11 +8,11 @@ using McpDatabaseQueryApp.Core.Profiles;
 using McpDatabaseQueryApp.Core.Storage;
 using McpDatabaseQueryApp.Providers.Postgres;
 using McpDatabaseQueryApp.Providers.SqlServer;
+using McpDatabaseQueryApp.Server.Caching;
 using McpDatabaseQueryApp.Server.Completions;
 using McpDatabaseQueryApp.Server.DependencyInjection;
 using McpDatabaseQueryApp.Server.Elicitation;
 using McpDatabaseQueryApp.Server.Hosting;
-using McpDatabaseQueryApp.Server.Logging;
 using McpDatabaseQueryApp.Server.Metadata;
 using McpDatabaseQueryApp.Server.Prompts;
 using McpDatabaseQueryApp.Server.Resources;
@@ -25,6 +25,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol;
+using ModelContextProtocol.Extensions.Apps;
 
 var bootstrap = new ConfigurationManager();
 bootstrap.AddJsonFile("appsettings.json", optional: true);
@@ -55,6 +56,7 @@ static async Task RunStdioAsync(string[] args, McpDatabaseQueryAppOptions option
     ConfigureServices(builder.Services, builder.Configuration, includeHttp: false);
 
     var host = builder.Build();
+    host.Services.UseMcpTasks();
     await InitializeStoreAsync(host.Services).ConfigureAwait(false);
 
     // Stdio has no client identity. Open the default profile scope for the
@@ -85,6 +87,7 @@ static async Task RunWebAsync(string[] args, McpDatabaseQueryAppOptions options)
     }
 
     var app = builder.Build();
+    app.Services.UseMcpTasks();
     await InitializeStoreAsync(app.Services).ConfigureAwait(false);
 
     var adminApiOptions = app.Services.GetRequiredService<McpDatabaseQueryApp.Server.AdminApi.AdminApiOptions>();
@@ -129,11 +132,11 @@ static void ConfigureServices(IServiceCollection services, IConfiguration config
         services.AddAdminApi(configuration);
     }
     services.AddHostedService<IsolationRuleBootstrap>();
+    var taskRegistration = services.AddMcpTasks(configuration);
     services.AddMcpDestructiveOperationConfirmer();
     services.AddSingleton<MetadataCache>();
     services.AddSingleton<IElicitationGateway, ElicitationGateway>();
     services.AddSingleton<CompletionRouter>();
-    services.AddSingleton<McpLoggingBridge>();
     services.AddSingleton<ScriptPromptProvider>();
     services.AddSingleton<MutationGuard>();
     services.AddHostedService<ResultSetJanitor>();
@@ -198,12 +201,25 @@ static void ConfigureServices(IServiceCollection services, IConfiguration config
        .WithResources<AppResources>()
        .WithCompleteHandler(static (ctx, ct) =>
            ctx.Services!.GetRequiredService<CompletionRouter>().HandleAsync(ctx, ct))
-       .WithSetLoggingLevelHandler(static (ctx, ct) =>
-           ctx.Services!.GetRequiredService<McpLoggingBridge>().HandleSetLevelAsync(ctx, ct));
+       .WithListResultCacheHints()
+#pragma warning disable MCPEXP003 // MCP Apps extension is experimental; see AppResources.
+       .WithMcpApps()
+#pragma warning restore MCPEXP003
+       .WithMcpTasks(taskRegistration);
 
     if (includeHttp)
     {
-        mcp.WithHttpTransport();
+        // MCP 2026-07-28 removes protocol-level sessions and the Mcp-Session-Id
+        // header from Streamable HTTP (SEP-2567), so the transport is stateless.
+        // Setting Stateless = false would make the server refuse the current
+        // revision and fall back to the legacy `initialize` handshake.
+        //
+        // This server was already session-free: every cross-call handle
+        // (connection id, result-set cursor, script id) is server-minted and
+        // passed back as an ordinary tool argument, which is exactly the pattern
+        // SEP-2567 prescribes. Mid-tool questions go through the multi
+        // round-trip request pattern — see ElicitationGateway.
+        mcp.WithHttpTransport(static options => options.Stateless = true);
     }
     else
     {

@@ -8,9 +8,9 @@ using McpDatabaseQueryApp.Server.DependencyInjection;
 using McpDatabaseQueryApp.Server.IntegrationTests.Profiles;
 using McpDatabaseQueryApp.Providers.Postgres;
 using McpDatabaseQueryApp.Providers.SqlServer;
+using McpDatabaseQueryApp.Server.Caching;
 using McpDatabaseQueryApp.Server.Completions;
 using McpDatabaseQueryApp.Server.Elicitation;
-using McpDatabaseQueryApp.Server.Logging;
 using McpDatabaseQueryApp.Server.Metadata;
 using McpDatabaseQueryApp.Server.Prompts;
 using McpDatabaseQueryApp.Server.Resources;
@@ -21,6 +21,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using ModelContextProtocol.Client;
+using ModelContextProtocol.Extensions.Apps;
 using ModelContextProtocol.Protocol;
 
 namespace McpDatabaseQueryApp.Server.IntegrationTests;
@@ -159,6 +160,7 @@ public sealed class InProcessServerHarness : IAsyncDisposable
         services.AddDataIsolation(configuration);
         services.AddHostedService<Hosting.IsolationRuleBootstrap>();
         services.AddMcpDestructiveOperationConfirmer();
+        var taskRegistration = services.AddMcpTasks(configuration);
 
         // Register the static-entry bootstrap as both the IAclStaticEntrySource
         // and a hosted service so config-driven entries flow into the evaluator.
@@ -168,7 +170,6 @@ public sealed class InProcessServerHarness : IAsyncDisposable
         services.AddSingleton<MetadataCache>();
         services.AddSingleton<IElicitationGateway, ElicitationGateway>();
         services.AddSingleton<CompletionRouter>();
-        services.AddSingleton<McpLoggingBridge>();
         services.AddSingleton<MutationGuard>();
         services.AddSingleton<ScriptPromptProvider>();
 
@@ -191,10 +192,15 @@ public sealed class InProcessServerHarness : IAsyncDisposable
            .WithResources<McpDatabaseQueryAppResources>()
            .WithResources<AppResources>()
            .WithCompleteHandler(static (ctx, ct) => ctx.Services!.GetRequiredService<CompletionRouter>().HandleAsync(ctx, ct))
-           .WithSetLoggingLevelHandler(static (ctx, ct) => ctx.Services!.GetRequiredService<McpLoggingBridge>().HandleSetLevelAsync(ctx, ct))
+           .WithListResultCacheHints()
+#pragma warning disable MCPEXP003 // MCP Apps extension is experimental; see AppResources.
+           .WithMcpApps()
+#pragma warning restore MCPEXP003
+           .WithMcpTasks(taskRegistration)
            .WithStreamServerTransport(clientToServer.Reader.AsStream(), serverToClient.Writer.AsStream());
 
         var provider = services.BuildServiceProvider();
+        provider.UseMcpTasks();
         await provider.GetRequiredService<IMetadataStore>().InitializeAsync(cancellationToken);
         var profileStore = provider.GetRequiredService<IProfileStore>();
         await profileStore.EnsureDefaultAsync(cancellationToken);
