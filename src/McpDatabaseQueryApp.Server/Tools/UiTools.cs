@@ -1,7 +1,14 @@
+using McpDatabaseQueryApp.Apps;
 using System.ComponentModel;
 using McpDatabaseQueryApp.Core.Results;
 using Microsoft.Extensions.Logging;
+using ModelContextProtocol.Extensions.Apps;
 using ModelContextProtocol.Server;
+
+// The MCP Apps extension (io.modelcontextprotocol/apps) is still marked experimental by the
+// SDK (MCPEXP003). Suppressed at file scope rather than project-wide so that any *other*
+// experimental API introduced elsewhere still fails the build and gets a deliberate decision.
+#pragma warning disable MCPEXP003
 
 namespace McpDatabaseQueryApp.Server.Tools;
 
@@ -16,7 +23,7 @@ public sealed class UiTools
     }
 
     [McpServerTool(Name = "db_builder_open", ReadOnly = true)]
-    [McpMeta("ui", JsonValue = "{\"resourceUri\":\"ui://mcp-database-query-app/builder.html\",\"visibility\":[\"model\",\"app\"]}")]
+    [McpAppUi(ResourceUri = AppResources.BuilderUri, Visibility = [McpUiToolVisibility.Model, McpUiToolVisibility.App])]
     [Description("Opens the interactive SQL builder UI. Text-mode clients receive an instructional message instead.")]
     public OpenUiResult OpenBuilder(string connectionId)
     {
@@ -27,7 +34,7 @@ public sealed class UiTools
     }
 
     [McpServerTool(Name = "ui_results_export_csv", ReadOnly = true)]
-    [McpMeta("ui", JsonValue = "{\"visibility\":[\"app\"]}")]
+    [McpAppUi(Visibility = [McpUiToolVisibility.App])]
     [Description("UI-only helper. Produces a CSV-formatted string from a cached result set.")]
     public UiCsvResult ExportCsv(
         [Description("Column names in desired order.")] IReadOnlyList<string> columns,
@@ -49,7 +56,7 @@ public sealed class UiTools
     }
 
     [McpServerTool(Name = "ui_chart", ReadOnly = true)]
-    [McpMeta("ui", JsonValue = "{\"resourceUri\":\"ui://mcp-database-query-app/chart.html\",\"visibility\":[\"model\",\"app\"]}")]
+    [McpAppUi(ResourceUri = AppResources.ChartUri, Visibility = [McpUiToolVisibility.Model, McpUiToolVisibility.App])]
     [Description("Opens a Chart.js visualization for the supplied result set. Supports bar, line, area, scatter, timeseries, combo (mixed bar+line), pie and doughnut charts — with multiple series, a secondary Y axis, stacking, dashed/forecast segments and confidence bands. Pass columns and rows from a prior db_query call.")]
     public OpenChartResult OpenChart(
         string connectionId,
@@ -90,7 +97,7 @@ public sealed class UiTools
     }
 
     [McpServerTool(Name = "ui_schema_view", ReadOnly = true)]
-    [McpMeta("ui", JsonValue = "{\"resourceUri\":\"ui://mcp-database-query-app/schema-viewer.html\",\"visibility\":[\"model\",\"app\"]}")]
+    [McpAppUi(ResourceUri = AppResources.SchemaViewerUri, Visibility = [McpUiToolVisibility.Model, McpUiToolVisibility.App])]
     [Description("Opens an ERD schema viewer showing table relationships and column details.")]
     public OpenUiResult OpenSchemaViewer(string connectionId)
     {

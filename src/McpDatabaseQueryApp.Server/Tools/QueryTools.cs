@@ -1,3 +1,4 @@
+using McpDatabaseQueryApp.Apps;
 using System.ComponentModel;
 using System.Text;
 using McpDatabaseQueryApp.Core.Configuration;
@@ -7,7 +8,14 @@ using McpDatabaseQueryApp.Core.QueryExecution;
 using McpDatabaseQueryApp.Core.Results;
 using McpDatabaseQueryApp.Server.Elicitation;
 using Microsoft.Extensions.Logging;
+using ModelContextProtocol.Extensions.Apps;
+using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
+
+// The MCP Apps extension (io.modelcontextprotocol/apps) is still marked experimental by the
+// SDK (MCPEXP003). Suppressed at file scope rather than project-wide so that any *other*
+// experimental API introduced elsewhere still fails the build and gets a deliberate decision.
+#pragma warning disable MCPEXP003
 
 namespace McpDatabaseQueryApp.Server.Tools;
 
@@ -41,10 +49,10 @@ public sealed class QueryTools
     }
 
     [McpServerTool(Name = "db_query", ReadOnly = true, UseStructuredContent = true)]
-    [McpMeta("ui", JsonValue = "{\"resourceUri\":\"ui://mcp-database-query-app/results.html\",\"visibility\":[\"model\",\"app\"]}")]
+    [McpAppUi(ResourceUri = AppResources.ResultsUri, Visibility = [McpUiToolVisibility.Model, McpUiToolVisibility.App])]
     [Description("Runs a parameterised SELECT query. Results above the default row limit are paged and cached as a result set resource.")]
     public async Task<QueryToolResult> QueryAsync(
-        McpServer server,
+        RequestContext<CallToolRequestParams> context,
         QueryToolArgs args,
         CancellationToken cancellationToken)
     {
@@ -70,7 +78,7 @@ public sealed class QueryTools
         }
         catch (UnconfirmedUnlimitedResultException)
         {
-            var confirmed = await _elicitation.ConfirmAsync(server, "You requested unlimited rows. Confirm execution?", cancellationToken).ConfigureAwait(false);
+            var confirmed = await _elicitation.ConfirmAsync(context, "confirm_unlimited", "You requested unlimited rows. Confirm execution?", cancellationToken).ConfigureAwait(false);
             if (!confirmed)
             {
                 throw;
@@ -86,7 +94,7 @@ public sealed class QueryTools
             QueryExecutionMode.Read,
             confirmDestructive: false,
             confirmUnlimited: args.ConfirmUnlimited);
-        pipelineContext.Items[McpDestructiveOperationConfirmer.ContextKey] = server;
+        pipelineContext.Items[McpDestructiveOperationConfirmer.ContextKey] = context;
         await _pipeline.ExecuteAsync(pipelineContext, cancellationToken).ConfigureAwait(false);
 
         // Request one extra row so we can detect truncation even if the caller asked for exactly `effectiveLimit`.
@@ -201,7 +209,7 @@ public sealed class QueryTools
     [McpServerTool(Name = "db_execute")]
     [Description("Runs an INSERT/UPDATE/DELETE/DDL statement. Destructive SQL triggers a confirmation elicitation unless confirm=true.")]
     public async Task<ExecuteResult> ExecuteAsync(
-        McpServer server,
+        RequestContext<CallToolRequestParams> context,
         ExecuteArgs args,
         CancellationToken cancellationToken)
     {
@@ -227,7 +235,7 @@ public sealed class QueryTools
             QueryExecutionMode.Write,
             confirmDestructive: args.Confirm,
             confirmUnlimited: false);
-        pipelineContext.Items[McpDestructiveOperationConfirmer.ContextKey] = server;
+        pipelineContext.Items[McpDestructiveOperationConfirmer.ContextKey] = context;
 
         try
         {
@@ -255,7 +263,7 @@ public sealed class QueryTools
     [McpServerTool(Name = "db_explain", ReadOnly = true)]
     [Description("Returns the provider's execution plan for the supplied SQL.")]
     public async Task<ExplainToolResult> ExplainAsync(
-        McpServer server,
+        RequestContext<CallToolRequestParams> context,
         ExplainArgs args,
         CancellationToken cancellationToken)
     {
@@ -281,7 +289,7 @@ public sealed class QueryTools
             QueryExecutionMode.Explain,
             confirmDestructive: false,
             confirmUnlimited: false);
-        pipelineContext.Items[McpDestructiveOperationConfirmer.ContextKey] = server;
+        pipelineContext.Items[McpDestructiveOperationConfirmer.ContextKey] = context;
         await _pipeline.ExecuteAsync(pipelineContext, cancellationToken).ConfigureAwait(false);
 
         var plan = await connection.ExplainAsync(pipelineContext.Sql, pipelineContext.Parameters, cancellationToken).ConfigureAwait(false);

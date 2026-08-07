@@ -5,6 +5,7 @@ using McpDatabaseQueryApp.Core.Security;
 using McpDatabaseQueryApp.Core.Storage;
 using McpDatabaseQueryApp.Server.Elicitation;
 using Microsoft.Extensions.Logging;
+using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 
 namespace McpDatabaseQueryApp.Server.Tools;
@@ -100,7 +101,7 @@ public sealed class PredefinedDbTools
     [McpServerTool(Name = "db_predefined_delete", Destructive = true)]
     [Description("Deletes a pre-defined database entry. Elicits a confirmation from the user.")]
     public async Task<DeleteResult> DeleteAsync(
-        McpServer server,
+        RequestContext<CallToolRequestParams> context,
         [Description("Name or id of the pre-defined database to delete.")] string nameOrId,
         [Description("Skip the server-side confirmation elicitation. The MCP client may still show its own destructive-tool prompt via the tool's Destructive annotation.")] bool confirm,
         CancellationToken cancellationToken)
@@ -113,9 +114,9 @@ public sealed class PredefinedDbTools
             return new DeleteResult(nameOrId, Deleted: false);
         }
 
-        if (!confirm && _elicitation.ClientSupportsForm(server))
+        if (!confirm && _elicitation.CanElicit(context))
         {
-            var ok = await _elicitation.ConfirmAsync(server, $"Delete pre-defined database '{existing.Descriptor.Name}'?", cancellationToken).ConfigureAwait(false);
+            var ok = await _elicitation.ConfirmAsync(context, "confirm_delete_predefined", $"Delete pre-defined database '{existing.Descriptor.Name}'?", cancellationToken).ConfigureAwait(false);
             if (!ok)
             {
                 return new DeleteResult(nameOrId, Deleted: false);

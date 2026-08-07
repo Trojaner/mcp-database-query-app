@@ -12,17 +12,13 @@
     <InvariantGlobalization>false</InvariantGlobalization>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
     <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
-    <!-- NU1903: transitive SQLitePCLRaw.lib.e_sqlite3 2.1.11 flagged by NuGet audit
-         (GHSA-2m69-gcr7-jv3q). Suppressed so the audit warning does not fail the
-         build under TreatWarningsAsErrors. Remove once a patched version is available. -->
-    <NoWarn>$(NoWarn);NU1903</NoWarn>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(IsTestProject)' != 'true'">
     <!-- IL2026/IL3050/IL2104: AOT analyzer warnings from reflection-based JSON and
          Dapper call sites that have not yet been migrated to JsonSerializerContext /
          Dapper.AOT interceptors. Remove these suppressions as call sites are fixed. -->
-    <NoWarn>$(NoWarn);CA1014;IL2026;IL3050;IL2104</NoWarn>
+    <NoWarn>$(NoWarn);CA1014</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

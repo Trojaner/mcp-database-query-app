@@ -1,6 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <IsAotCompatible>true</IsAotCompatible>
+    <!-- IL2026/IL3050: trim/AOT warnings from the Dapper call sites in
+         PostgresConnection.cs that still use the reflection-based mapper rather than the
+         Dapper.AOT interceptors. Scoped to this project rather than suppressed
+         solution-wide, so new AOT-unsafe code elsewhere still fails the build.
+         Remove once those call sites migrate. -->
+    <NoWarn>$(NoWarn);IL2026;IL3050</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Dapper" />

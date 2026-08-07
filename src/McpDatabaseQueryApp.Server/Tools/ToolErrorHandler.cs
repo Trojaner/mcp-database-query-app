@@ -1,4 +1,6 @@
 using Microsoft.Extensions.Logging;
+using ModelContextProtocol;
+using ModelContextProtocol.Protocol;
 
 namespace McpDatabaseQueryApp.Server.Tools;
 
@@ -10,7 +12,7 @@ public static class ToolErrorHandler
         {
             return await action().ConfigureAwait(false);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (!IsControlFlow(ex))
         {
             logger.LogError(ex, "Tool execution failed");
             throw new InvalidOperationException(Sanitize(ex));
@@ -23,12 +25,26 @@ public static class ToolErrorHandler
         {
             return action();
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (!IsControlFlow(ex))
         {
             logger.LogError(ex, "Tool execution failed");
             throw new InvalidOperationException(Sanitize(ex));
         }
     }
+
+    /// <summary>
+    /// Exceptions that carry protocol meaning rather than a failure, and so must
+    /// reach the SDK unmodified.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="InputRequiredException"/> is how a tool asks the client for more
+    /// input under the multi round-trip request pattern (MCP 2026-07-28, SEP-2322).
+    /// The SDK turns it into an <c>input_required</c> result; converting it to an
+    /// <see cref="InvalidOperationException"/> here would surface every confirmation
+    /// prompt as a tool error instead.
+    /// </remarks>
+    private static bool IsControlFlow(Exception ex) =>
+        ex is OperationCanceledException or InputRequiredException or UrlElicitationRequiredException;
 
     private static string Sanitize(Exception ex)
     {

@@ -1,8 +1,16 @@
 using System.ComponentModel;
 using System.Reflection;
+using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization.Metadata;
+using ModelContextProtocol.Extensions.Apps;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
+
+// The MCP Apps extension (io.modelcontextprotocol/apps) is still marked experimental by the
+// SDK (MCPEXP003). Suppressed at file scope rather than project-wide so that any *other*
+// experimental API introduced elsewhere still fails the build and gets a deliberate decision.
+#pragma warning disable MCPEXP003
 
 namespace McpDatabaseQueryApp.Apps;
 
@@ -13,7 +21,7 @@ public sealed class AppResources
     public const string BuilderUri = "ui://mcp-database-query-app/builder.html";
     public const string ChartUri = "ui://mcp-database-query-app/chart.html";
     public const string SchemaViewerUri = "ui://mcp-database-query-app/schema-viewer.html";
-    public const string MimeType = "text/html;profile=mcp-app";
+    public const string MimeType = McpApps.HtmlMimeType;
 
     private static readonly Lazy<string> ResultsHtml = new(() => LoadEmbedded("McpDatabaseQueryApp.Apps.ui.results.html"));
     private static readonly Lazy<string> BuilderHtml = new(() => LoadEmbedded("McpDatabaseQueryApp.Apps.ui.builder.html"));
@@ -68,26 +76,38 @@ public sealed class AppResources
 
     public static string GetSchemaViewerHtml() => SchemaViewerHtml.Value;
 
+    /// <summary>
+    /// Builds the <c>_meta.ui</c> block carried on a UI resource's contents.
+    /// </summary>
+    /// <remarks>
+    /// Uses the typed <see cref="McpUiResourceMeta"/> model from the MCP Apps extension rather
+    /// than a hand-built <see cref="JsonObject"/>, so the property names and shape come from
+    /// the SDK's own contract instead of string literals that drift silently when the Apps
+    /// spec moves. Serialized with <see cref="McpApps.SerializerOptions"/> to get the casing
+    /// and null-handling the extension expects.
+    /// </remarks>
     private static JsonObject BuildUiMeta(bool prefersBorder, IReadOnlyList<string>? resourceDomains = null)
     {
-        var ui = new JsonObject
+        var meta = new McpUiResourceMeta
         {
-            ["prefersBorder"] = prefersBorder,
+            PrefersBorder = prefersBorder,
         };
 
         if (resourceDomains is { Count: > 0 })
         {
-            var domains = new JsonArray();
-            foreach (var domain in resourceDomains)
+            meta.Csp = new McpUiResourceCsp
             {
-                domains.Add(domain);
-            }
-
-            ui["csp"] = new JsonObject
-            {
-                ["resourceDomains"] = domains,
+                ResourceDomains = [.. resourceDomains],
             };
         }
+
+        // Resolve the contract up front and serialize through JsonTypeInfo rather than the
+        // (TValue, JsonSerializerOptions) overload: that overload is annotated
+        // RequiresUnreferencedCode/RequiresDynamicCode and would break this project's
+        // IsAotCompatible guarantee.
+        var typeInfo = (JsonTypeInfo<McpUiResourceMeta>)McpApps.SerializerOptions.GetTypeInfo(typeof(McpUiResourceMeta));
+        var ui = JsonSerializer.SerializeToNode(meta, typeInfo)
+            ?? throw new InvalidOperationException("Failed to serialize MCP App UI resource metadata.");
 
         return new JsonObject
         {

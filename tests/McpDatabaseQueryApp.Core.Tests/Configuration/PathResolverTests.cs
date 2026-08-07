@@ -24,10 +24,20 @@ public sealed class PathResolverTests
     }
 
     [Fact]
-    public void Forward_slashes_are_normalized()
+    public void Forward_slashes_are_normalized_to_the_platform_separator()
     {
         var resolved = PathResolver.Resolve("/tmp/abc/file.db");
-        resolved.Should().NotContain("/", because: "Windows should convert forward slashes");
+
+        // PathResolver rewrites '/' to Path.DirectorySeparatorChar, so the observable
+        // behaviour differs by platform: on Windows the separator becomes '\', while on
+        // Unix '/' already is the separator and is left alone. Asserting the Windows
+        // outcome unconditionally made this fail on macOS and Linux for no real reason.
+        resolved.Should().EndWith($"abc{Path.DirectorySeparatorChar}file.db");
+
+        if (OperatingSystem.IsWindows())
+        {
+            resolved.Should().NotContain("/");
+        }
     }
 
     [Fact]

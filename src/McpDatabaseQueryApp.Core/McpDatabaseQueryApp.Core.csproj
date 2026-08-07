@@ -2,6 +2,19 @@
   <PropertyGroup>
     <IsAotCompatible>true</IsAotCompatible>
     <UserSecretsId>6f847836-852a-4e1f-8996-ac2aeb143b48</UserSecretsId>
+
+    <!-- IL2026/IL3050: trim/AOT warnings from the Dapper call sites that still use the
+         reflection-based mapper instead of the Dapper.AOT interceptors (concentrated in
+         Storage/Sqlite*Store.cs), plus reflection-based System.Text.Json in
+         Results/CursorCodec.cs and Results/FileResultSetCache.cs.
+
+         Scoped to this project deliberately. This used to be suppressed across every
+         non-test project, which meant new AOT-unsafe code anywhere in the solution was
+         silenced too; the Server, Apps and Providers projects turn out to need no
+         suppression at all, so they now fail the build on any new violation.
+
+         Remove the individual codes as those call sites migrate. -->
+    <NoWarn>$(NoWarn);IL2026;IL3050</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Dapper" />
