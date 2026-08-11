@@ -35,12 +35,16 @@ public sealed class PredefinedDbTools
 
     [McpServerTool(Name = "db_predefined_get", ReadOnly = true)]
     [Description("Fetches redacted metadata for a pre-defined database.")]
-    public async Task<RedactedDescriptor?> GetAsync(string nameOrId, CancellationToken cancellationToken)
+    public async Task<RedactedDescriptor> GetAsync(string nameOrId, CancellationToken cancellationToken)
     {
         return await ToolErrorHandler.WrapAsync(async () =>
         {
-        var record = await _metadata.GetDatabaseAsync(nameOrId, cancellationToken).ConfigureAwait(false);
-        return record is null ? null : RedactedDescriptor.From(record.Descriptor);
+        // A bare null told the caller nothing about why the lookup came back
+        // empty. Every other pre-defined lookup (db_connect included) reports a
+        // miss as an error, so this one does too.
+        var record = await _metadata.GetDatabaseAsync(nameOrId, cancellationToken).ConfigureAwait(false)
+            ?? throw new KeyNotFoundException($"Pre-defined database '{nameOrId}' not found.");
+        return RedactedDescriptor.From(record.Descriptor);
         }, _logger).ConfigureAwait(false);
     }
 

@@ -12,6 +12,7 @@
     <PackageReference Include="ModelContextProtocol" />
     <PackageReference Include="Testcontainers.PostgreSql" />
     <PackageReference Include="Testcontainers.MsSql" />
+    <PackageReference Include="Xunit.SkippableFact" />
     <PackageReference Include="coverlet.collector" />
   </ItemGroup>
   <ItemGroup>

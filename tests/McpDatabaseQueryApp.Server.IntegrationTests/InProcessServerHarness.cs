@@ -181,7 +181,8 @@ public sealed class InProcessServerHarness : IAsyncDisposable
             options.ServerInfo = new Implementation { Name = "McpDatabaseQueryApp.Test", Version = "0.0.1" };
         });
 
-        mcp.WithTools<ConnectionTools>()
+        mcp.WithDetailedErrorReporting()
+           .WithTools<ConnectionTools>()
            .WithTools<PredefinedDbTools>()
            .WithTools<QueryTools>()
            .WithTools<SchemaTools>()

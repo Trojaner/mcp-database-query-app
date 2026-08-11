@@ -175,7 +175,8 @@ static void ConfigureServices(IServiceCollection services, IConfiguration config
         options.ServerInstructions = "MCP Database Query App is a database management server for PostgreSQL and SQL Server. Use db_list_predefined to discover configured databases and db_connect to open a session.";
     });
 
-    mcp.WithTools<ConnectionTools>(toolSerializerOptions)
+    mcp.WithDetailedErrorReporting()
+       .WithTools<ConnectionTools>(toolSerializerOptions)
        .WithTools<PredefinedDbTools>(toolSerializerOptions)
        .WithTools<QueryTools>(toolSerializerOptions)
        .WithTools<SchemaTools>(toolSerializerOptions)
