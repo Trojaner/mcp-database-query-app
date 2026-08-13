@@ -7,6 +7,7 @@ using McpDatabaseQueryApp.Core.Authorization;
 using McpDatabaseQueryApp.Core.DataIsolation;
 using McpDatabaseQueryApp.Core.QueryExecution;
 using McpDatabaseQueryApp.Core.QueryParsing;
+using McpDatabaseQueryApp.Server.Elicitation;
 using ModelContextProtocol;
 using ModelContextProtocol.Protocol;
 
@@ -119,6 +120,8 @@ public static partial class ToolErrorHandler
         MutationOnReadPathException e => e.Message,
         DestructiveOperationConfirmationRequiredException e => e.Message,
         DestructiveOperationCancelledException e => e.Message,
+        WriteAccessConfirmationRequiredException e => e.Message,
+        WriteAccessDeclinedException e => e.Message,
 
         // Lookup and validation.
         KeyNotFoundException e => $"Not found: {e.Message}",

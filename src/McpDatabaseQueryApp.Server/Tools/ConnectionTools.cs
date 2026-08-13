@@ -20,6 +20,7 @@ public sealed class ConnectionTools
     private readonly IProviderRegistry _providers;
     private readonly IMetadataStore _metadata;
     private readonly IElicitationGateway _elicitation;
+    private readonly MutationGuard _mutationGuard;
     private readonly MetadataCache _metadataCache;
     private readonly ILogger<ConnectionTools> _logger;
 
@@ -28,6 +29,7 @@ public sealed class ConnectionTools
         IProviderRegistry providers,
         IMetadataStore metadata,
         IElicitationGateway elicitation,
+        MutationGuard mutationGuard,
         MetadataCache metadataCache,
         ILogger<ConnectionTools> logger)
     {
@@ -35,6 +37,7 @@ public sealed class ConnectionTools
         _providers = providers;
         _metadata = metadata;
         _elicitation = elicitation;
+        _mutationGuard = mutationGuard;
         _metadataCache = metadataCache;
         _logger = logger;
     }
@@ -71,7 +74,7 @@ public sealed class ConnectionTools
     }
 
     [McpServerTool(Name = "db_connect", Destructive = false)]
-    [Description("Opens a database connection. Provide a pre-defined 'name' or an ad-hoc descriptor. Passwords must be set out-of-band via db_predefined_create.")]
+    [Description("Opens a database connection. Provide a pre-defined 'name' or an ad-hoc descriptor. Passwords must be set out-of-band via db_predefined_create. Opening a connection that is not read-only asks for confirmation first.")]
     public async Task<ConnectResult> ConnectAsync(
         RequestContext<CallToolRequestParams> context,
         ConnectArgs args,
@@ -82,6 +85,23 @@ public sealed class ConnectionTools
         ArgumentNullException.ThrowIfNull(args);
         if (!string.IsNullOrWhiteSpace(args.Name))
         {
+            // The confirmation has to happen before the connection is opened, so
+            // the read-only flag is read off the stored entry rather than off the
+            // live connection.
+            var record = await _metadata.GetDatabaseAsync(args.Name, cancellationToken).ConfigureAwait(false);
+            if (record is not null && !record.Descriptor.ReadOnly)
+            {
+                await WriteAccessConfirmation.EnsureApprovedAsync(
+                    _elicitation,
+                    _mutationGuard,
+                    context,
+                    WriteAccessConfirmation.ConnectInputKey,
+                    $"Open a WRITE-ENABLED (not read-only) connection to pre-defined database '{record.Descriptor.Name}' "
+                    + $"({record.Descriptor.Provider} {Describe(record.Descriptor)})? Writes and DDL will be permitted for the life of this connection.",
+                    args.Confirm,
+                    cancellationToken).ConfigureAwait(false);
+            }
+
             var connection = await _registry.OpenPredefinedAsync(args.Name, cancellationToken).ConfigureAwait(false);
             _ = _metadataCache.GetOrCreate(connection.Id);
             return new ConnectResult(connection.Id, RedactedDescriptor.From(connection.Descriptor));
@@ -118,6 +138,19 @@ public sealed class ConnectionTools
             DefaultSchema = args.DefaultSchema,
             Tags = args.Tags ?? [],
         };
+
+        if (!descriptor.ReadOnly)
+        {
+            await WriteAccessConfirmation.EnsureApprovedAsync(
+                _elicitation,
+                _mutationGuard,
+                context,
+                WriteAccessConfirmation.ConnectInputKey,
+                $"Open a WRITE-ENABLED (not read-only) connection to {descriptor.Provider} {Describe(descriptor)}? "
+                + "Writes and DDL will be permitted for the life of this connection.",
+                args.Confirm,
+                cancellationToken).ConfigureAwait(false);
+        }
 
         var opened = await _registry.OpenAsync(descriptor, args.Password, cancellationToken).ConfigureAwait(false);
         _ = _metadataCache.GetOrCreate(opened.Id);
@@ -161,6 +194,16 @@ public sealed class ConnectionTools
         return new PingResult(connectionId, true, sw.ElapsedMilliseconds);
         }, _logger).ConfigureAwait(false);
     }
+
+    /// <summary>
+    /// Renders the target of a connection for a confirmation prompt. Never
+    /// includes credentials — only the coordinates the user needs to recognise
+    /// which database is about to become writable.
+    /// </summary>
+    private static string Describe(ConnectionDescriptor descriptor) =>
+        descriptor.Port is { } port
+            ? $"{descriptor.Host}:{port}/{descriptor.Database} as {descriptor.Username}"
+            : $"{descriptor.Host}/{descriptor.Database} as {descriptor.Username}";
 }
 
 public sealed class ConnectArgs
@@ -189,11 +232,15 @@ public sealed class ConnectArgs
 
     public bool? TrustServerCertificate { get; set; }
 
+    [Description("Defaults to true. Setting it to false opens a write-enabled connection and requires an explicit confirmation.")]
     public bool? ReadOnly { get; set; }
 
     public string? DefaultSchema { get; set; }
 
     public IReadOnlyList<string>? Tags { get; set; }
+
+    [Description("Skip the write-access confirmation. Only effective with --dangerously-skip-permissions.")]
+    public bool Confirm { get; set; }
 }
 
 public sealed record ConnectResult(string ConnectionId, RedactedDescriptor Descriptor);

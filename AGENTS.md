@@ -87,7 +87,12 @@ Directory.Packages.props  # Central Package Management versions
    destructive ones) **must** route through
    `IElicitationGateway.ConfirmAsync(...)` unless the caller passed an
    explicit `confirm=true` argument. Read-only connections must hard-block
-   writes before the elicitation path is even reached.
+   writes before the elicitation path is even reached. Granting write
+   access is confirmed the same way: any tool that opens a connection
+   with `ReadOnly = false`, registers a pre-defined entry with
+   `ReadOnly = false`, or flips an existing entry from read-only to
+   writable goes through `WriteAccessConfirmation.EnsureApprovedAsync`
+   **before** it touches the store or the driver.
 7. Parameterize every SQL statement. Never concatenate or interpolate
    user-supplied values into SQL strings — use Dapper parameters.
 8. Update or add an integration test (see §8) that exercises the happy
@@ -133,6 +138,10 @@ checked against this list before merging.
       `confirm=true`.
 - [ ] `ReadOnly` connections hard-refuse any non-query path, including
       tool arguments that would hand-craft a transaction.
+- [ ] Any grant of write access — opening a non-read-only connection,
+      creating a non-read-only pre-defined entry, or turning read-only
+      off on an existing one — is confirmed before the grant takes
+      effect, and fails closed when the client cannot be asked.
 - [ ] SSL is required for pre-defined connections unless the entry
       explicitly opts out, and opting out logs a warning at startup.
 - [ ] URL-mode elicitation URLs never contain user secrets, PII, or

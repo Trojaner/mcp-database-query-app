@@ -250,6 +250,10 @@ public sealed class LiveDatabaseErrorReportingTests
                 ["username"] = LivePostgresFixture.Username,
                 ["password"] = LivePostgresFixture.Password,
                 ["readOnly"] = readOnly,
+                // A write-enabled connection needs an explicit confirmation; the
+                // harness runs with --dangerously-skip-permissions so the flag is
+                // honoured instead of prompting.
+                ["confirm"] = true,
             },
         });
 

@@ -49,8 +49,9 @@ public sealed class PredefinedDbTools
     }
 
     [McpServerTool(Name = "db_predefined_create")]
-    [Description("Registers a new pre-defined database. The password is stored encrypted; it never leaves the server in any response.")]
+    [Description("Registers a new pre-defined database. The password is stored encrypted; it never leaves the server in any response. Registering an entry that is not read-only asks for confirmation first.")]
     public async Task<RedactedDescriptor> CreateAsync(
+        RequestContext<CallToolRequestParams> context,
         PredefinedDbArgs args,
         CancellationToken cancellationToken)
     {
@@ -63,6 +64,20 @@ public sealed class PredefinedDbTools
         }
 
         var descriptor = Build(args);
+
+        if (!descriptor.ReadOnly)
+        {
+            await WriteAccessConfirmation.EnsureApprovedAsync(
+                _elicitation,
+                _mutationGuard,
+                context,
+                WriteAccessConfirmation.CreateInputKey,
+                $"Register pre-defined database '{descriptor.Name}' ({descriptor.Provider} {Describe(descriptor)}) as WRITE-ENABLED (not read-only)? "
+                + "Every session that connects by this name will be allowed to run writes and DDL.",
+                args.Confirm,
+                cancellationToken).ConfigureAwait(false);
+        }
+
         var (cipher, nonce) = _protector.Encrypt(args.Password);
         await _metadata.UpsertDatabaseAsync(descriptor, cipher, nonce, cancellationToken).ConfigureAwait(false);
         return RedactedDescriptor.From(descriptor);
@@ -70,8 +85,9 @@ public sealed class PredefinedDbTools
     }
 
     [McpServerTool(Name = "db_predefined_update")]
-    [Description("Updates metadata of an existing pre-defined database. Credentials are never rotated through this tool.")]
+    [Description("Updates metadata of an existing pre-defined database. Credentials are never rotated through this tool. Turning read-only off asks for confirmation first.")]
     public async Task<RedactedDescriptor> UpdateAsync(
+        RequestContext<CallToolRequestParams> context,
         PredefinedDbUpdateArgs args,
         CancellationToken cancellationToken)
     {
@@ -97,6 +113,22 @@ public sealed class PredefinedDbTools
             CreatedAt = existing.Descriptor.CreatedAt,
             UpdatedAt = DateTimeOffset.UtcNow,
         };
+
+        // Only the transition matters: an entry that was already write-enabled
+        // was confirmed when it got that way, so re-saving it does not re-ask.
+        if (existing.Descriptor.ReadOnly && !descriptor.ReadOnly)
+        {
+            await WriteAccessConfirmation.EnsureApprovedAsync(
+                _elicitation,
+                _mutationGuard,
+                context,
+                WriteAccessConfirmation.UpdateInputKey,
+                $"Turn read-only OFF for pre-defined database '{descriptor.Name}' ({descriptor.Provider} {Describe(descriptor)})? "
+                + "Every session that connects by this name will be allowed to run writes and DDL.",
+                args.Confirm,
+                cancellationToken).ConfigureAwait(false);
+        }
+
         await _metadata.UpdateDatabaseMetadataAsync(descriptor, cancellationToken).ConfigureAwait(false);
         return RedactedDescriptor.From(descriptor);
         }, _logger).ConfigureAwait(false);
@@ -158,6 +190,16 @@ public sealed class PredefinedDbTools
             UpdatedAt = DateTimeOffset.UtcNow,
         };
     }
+
+    /// <summary>
+    /// Renders the target of an entry for a confirmation prompt. Never includes
+    /// credentials — only the coordinates the user needs to recognise which
+    /// database is about to become writable.
+    /// </summary>
+    private static string Describe(ConnectionDescriptor descriptor) =>
+        descriptor.Port is { } port
+            ? $"{descriptor.Host}:{port}/{descriptor.Database} as {descriptor.Username}"
+            : $"{descriptor.Host}/{descriptor.Database} as {descriptor.Username}";
 }
 
 public sealed class PredefinedDbArgs
@@ -181,11 +223,15 @@ public sealed class PredefinedDbArgs
 
     public bool? TrustServerCertificate { get; set; }
 
+    [Description("Defaults to true. Setting it to false registers a write-enabled entry and requires an explicit confirmation.")]
     public bool? ReadOnly { get; set; }
 
     public string? DefaultSchema { get; set; }
 
     public IReadOnlyList<string>? Tags { get; set; }
+
+    [Description("Skip the write-access confirmation. Only effective with --dangerously-skip-permissions.")]
+    public bool Confirm { get; set; }
 }
 
 public sealed record DeleteResult(string NameOrId, bool Deleted);
@@ -208,9 +254,13 @@ public sealed class PredefinedDbUpdateArgs
 
     public bool? TrustServerCertificate { get; set; }
 
+    [Description("Omit to keep the current setting. Changing it from true to false requires an explicit confirmation.")]
     public bool? ReadOnly { get; set; }
 
     public string? DefaultSchema { get; set; }
 
     public IReadOnlyList<string>? Tags { get; set; }
+
+    [Description("Skip the write-access confirmation. Only effective with --dangerously-skip-permissions.")]
+    public bool Confirm { get; set; }
 }
