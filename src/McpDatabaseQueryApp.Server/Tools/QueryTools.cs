@@ -207,7 +207,7 @@ public sealed class QueryTools
     }
 
     [McpServerTool(Name = "db_execute")]
-    [Description("Runs an INSERT/UPDATE/DELETE/DDL statement. Destructive SQL triggers a confirmation elicitation unless confirm=true.")]
+    [Description("Runs an INSERT/UPDATE/DELETE/DDL statement. Any SQL that changes the database triggers a confirmation elicitation unless confirm=true.")]
     public async Task<ExecuteResult> ExecuteAsync(
         RequestContext<CallToolRequestParams> context,
         ExecuteArgs args,
@@ -257,7 +257,7 @@ public sealed class QueryTools
     /// Returns the provider's execution plan for the supplied SQL. The
     /// pipeline runs in <see cref="QueryExecutionMode.Explain"/> so the
     /// statement is parsed and validated against read-only invariants but
-    /// destructive-statement confirmation is skipped — most engines accept
+    /// write confirmation is skipped — most engines accept
     /// <c>EXPLAIN</c> over any DML without performing the side effect.
     /// </summary>
     [McpServerTool(Name = "db_explain", ReadOnly = true)]
@@ -405,7 +405,7 @@ public sealed class ExecuteArgs
 
     public int? TimeoutSeconds { get; set; }
 
-    [Description("Skip the destructive-operation confirmation. Only effective when the server is started with --dangerously-skip-permissions.")]
+    [Description("Skip the write-confirmation prompt. Only effective when the server is started with --dangerously-skip-permissions.")]
     public bool Confirm { get; set; }
 }
 

@@ -4,10 +4,13 @@ using McpDatabaseQueryApp.Core.QueryParsing;
 namespace McpDatabaseQueryApp.Core.QueryExecution.Steps;
 
 /// <summary>
-/// Routes destructive batches through the registered
-/// <see cref="IDestructiveOperationConfirmer"/>. Skipped entirely when:
+/// Routes state-changing batches through the registered
+/// <see cref="IDestructiveOperationConfirmer"/>. Every mutation needs an
+/// explicit confirmation — INSERT and CREATE just as much as DROP or an
+/// unqualified DELETE — so nothing writes to a database without the user
+/// having seen the SQL. Skipped entirely when:
 /// <list type="bullet">
-///   <item><description>the parsed batch has no destructive statements;</description></item>
+///   <item><description>the parsed batch has no mutating statements;</description></item>
 ///   <item><description>the caller passed <c>confirm=true</c> AND the host
 ///   is started with <c>--dangerously-skip-permissions</c>;</description></item>
 ///   <item><description>the mode is <see cref="QueryExecutionMode.Explain"/>
@@ -43,45 +46,46 @@ public sealed class DestructiveConfirmationStep : IQueryExecutionStep
                 "DestructiveConfirmationStep requires the parse step to have run first.");
 
         if (context.Mode == QueryExecutionMode.Explain
-            || !parsed.ContainsDestructive
+            || !parsed.ContainsMutation
             || (context.ConfirmDestructive && _options.DangerouslySkipPermissions))
         {
             await next(cancellationToken).ConfigureAwait(false);
             return;
         }
 
-        var statements = BuildDestructiveStatements(parsed);
+        var statements = BuildMutatingStatements(parsed);
 
         var verdict = await _confirmer.ConfirmAsync(statements, cancellationToken).ConfigureAwait(false);
         if (verdict is null)
         {
             throw new DestructiveOperationConfirmationRequiredException(
-                "This SQL contains destructive operations and the connected client does not support elicitation. Re-run with confirm=true on a server started with --dangerously-skip-permissions, or connect a client that supports elicitation.",
+                "This SQL changes the database and the connected client does not support elicitation. Re-run with confirm=true on a server started with --dangerously-skip-permissions, or connect a client that supports elicitation.",
                 statements);
         }
 
         if (verdict == false)
         {
             throw new DestructiveOperationCancelledException(
-                "Destructive operation declined.",
+                "Write operation declined.",
                 statements);
         }
 
         await next(cancellationToken).ConfigureAwait(false);
     }
 
-    private static IReadOnlyList<DestructiveStatement> BuildDestructiveStatements(ParsedBatch parsed)
+    private static IReadOnlyList<DestructiveStatement> BuildMutatingStatements(ParsedBatch parsed)
     {
         var list = new List<DestructiveStatement>(parsed.Statements.Count);
         for (var i = 0; i < parsed.Statements.Count; i++)
         {
             var stmt = parsed.Statements[i];
-            if (stmt.IsDestructive)
+            if (stmt.IsMutation)
             {
                 list.Add(new DestructiveStatement(
                     stmt.StatementKind,
                     DestructiveReasonFormatter.Format(stmt),
-                    stmt.OriginalText));
+                    stmt.OriginalText,
+                    stmt.IsDestructive));
             }
         }
 

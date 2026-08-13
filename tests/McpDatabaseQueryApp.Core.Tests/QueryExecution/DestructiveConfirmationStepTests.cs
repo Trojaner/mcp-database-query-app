@@ -62,12 +62,88 @@ public sealed class DestructiveConfirmationStepTests
     }
 
     [Fact]
-    public async Task DELETE_with_WHERE_does_not_ask_confirmer()
+    public async Task DELETE_with_WHERE_still_asks_confirmer_as_a_non_destructive_write()
     {
         var parsed = TestFakes.Batch(
             DatabaseKind.Postgres,
             "DELETE FROM users WHERE id = 1",
             TestFakes.Statement(StatementKind.Delete, "DELETE FROM users WHERE id = 1", isMutation: true, isDestructive: false));
+
+        var confirmer = new FakeConfirmer(true);
+        var step = new DestructiveConfirmationStep(confirmer, new McpDatabaseQueryAppOptions());
+
+        var nextCalled = false;
+        await step.ExecuteAsync(MakeContext(parsed, false), _ => { nextCalled = true; return Task.CompletedTask; }, CancellationToken.None);
+
+        confirmer.CallCount.Should().Be(1);
+        confirmer.LastStatements.Should().ContainSingle();
+        confirmer.LastStatements![0].IsDestructive.Should().BeFalse();
+        nextCalled.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData(StatementKind.Insert, "INSERT INTO users (id) VALUES (1)")]
+    [InlineData(StatementKind.CreateTable, "CREATE TABLE t (id int)")]
+    [InlineData(StatementKind.Update, "UPDATE users SET name = 'x' WHERE id = 1")]
+    public async Task Non_destructive_writes_ask_confirmer(StatementKind kind, string sql)
+    {
+        var parsed = TestFakes.Batch(
+            DatabaseKind.Postgres,
+            sql,
+            TestFakes.Statement(kind, sql, isMutation: true, isDestructive: false));
+
+        var confirmer = new FakeConfirmer(true);
+        var step = new DestructiveConfirmationStep(confirmer, new McpDatabaseQueryAppOptions());
+
+        var nextCalled = false;
+        await step.ExecuteAsync(MakeContext(parsed, false), _ => { nextCalled = true; return Task.CompletedTask; }, CancellationToken.None);
+
+        confirmer.CallCount.Should().Be(1);
+        confirmer.LastStatements![0].Kind.Should().Be(kind);
+        confirmer.LastStatements[0].Reason.Should().NotBeEmpty();
+        nextCalled.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Declined_INSERT_throws_cancelled()
+    {
+        var parsed = TestFakes.Batch(
+            DatabaseKind.Postgres,
+            "INSERT INTO users (id) VALUES (1)",
+            TestFakes.Statement(StatementKind.Insert, "INSERT INTO users (id) VALUES (1)", isMutation: true, isDestructive: false));
+
+        var confirmer = new FakeConfirmer(false);
+        var step = new DestructiveConfirmationStep(confirmer, new McpDatabaseQueryAppOptions());
+
+        var act = () => step.ExecuteAsync(MakeContext(parsed, false), _ => Task.CompletedTask, CancellationToken.None);
+        await act.Should().ThrowAsync<DestructiveOperationCancelledException>();
+    }
+
+    [Fact]
+    public async Task Confirm_true_with_skip_permissions_bypasses_confirmer_for_plain_writes()
+    {
+        var parsed = TestFakes.Batch(
+            DatabaseKind.Postgres,
+            "INSERT INTO users (id) VALUES (1)",
+            TestFakes.Statement(StatementKind.Insert, "INSERT INTO users (id) VALUES (1)", isMutation: true, isDestructive: false));
+
+        var confirmer = new FakeConfirmer(false);
+        var step = new DestructiveConfirmationStep(confirmer, new McpDatabaseQueryAppOptions { DangerouslySkipPermissions = true });
+
+        var nextCalled = false;
+        await step.ExecuteAsync(MakeContext(parsed, confirmDestructive: true), _ => { nextCalled = true; return Task.CompletedTask; }, CancellationToken.None);
+
+        confirmer.CallCount.Should().Be(0);
+        nextCalled.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Read_only_batch_does_not_ask_confirmer()
+    {
+        var parsed = TestFakes.Batch(
+            DatabaseKind.Postgres,
+            "SELECT 1",
+            TestFakes.Statement(StatementKind.Select, "SELECT 1", isMutation: false, isDestructive: false));
 
         var confirmer = new FakeConfirmer(false);
         var step = new DestructiveConfirmationStep(confirmer, new McpDatabaseQueryAppOptions());

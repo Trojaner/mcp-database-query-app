@@ -146,7 +146,7 @@ public sealed class ScriptTools
     }
 
     [McpServerTool(Name = "scripts_run", Destructive = true)]
-    [Description("Executes a saved SQL script against a connection. Destructive scripts require confirmation.")]
+    [Description("Executes a saved SQL script against a connection. Scripts that change the database require confirmation.")]
     public async Task<ScriptRunResult> RunAsync(
         RequestContext<CallToolRequestParams> context,
         string nameOrId,

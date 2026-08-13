@@ -65,13 +65,34 @@ public sealed class McpDestructiveOperationConfirmer : IDestructiveOperationConf
 
     private static string BuildMessage(IReadOnlyList<DestructiveStatement> statements)
     {
+        var destructiveCount = 0;
+        for (var i = 0; i < statements.Count; i++)
+        {
+            if (statements[i].IsDestructive)
+            {
+                destructiveCount++;
+            }
+        }
+
         var sb = new StringBuilder();
-        sb.Append("This batch contains ").Append(statements.Count).AppendLine(" destructive statement(s):");
+        sb.Append("This batch contains ").Append(statements.Count).Append(" statement(s) that change the database");
+        if (destructiveCount > 0)
+        {
+            sb.Append(", ").Append(destructiveCount).Append(" of them destructive");
+        }
+
+        sb.AppendLine(":");
         sb.AppendLine();
         for (var i = 0; i < statements.Count; i++)
         {
             var s = statements[i];
-            sb.Append(i + 1).Append(". [").Append(s.Kind).Append("] ").AppendLine(s.Reason);
+            sb.Append(i + 1).Append(". [").Append(s.Kind);
+            if (s.IsDestructive)
+            {
+                sb.Append(" — DESTRUCTIVE");
+            }
+
+            sb.Append("] ").AppendLine(s.Reason);
             sb.AppendLine(s.Sql);
             sb.AppendLine();
         }

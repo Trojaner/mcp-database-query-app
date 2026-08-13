@@ -18,8 +18,8 @@ client.
   builder, schema explorer, and Chart.js charting as MCP UI resources
   that hosts with MCP UI support (e.g. Claude Desktop) render inline.
 - **Read-only by default** — writes and DDL are blocked unless a session
-  explicitly opts in. Destructive tools ask for confirmation before
-  running.
+  explicitly opts in. Any statement that changes the database — INSERT
+  and CREATE as much as DROP — asks for confirmation before running.
 - **Encrypted credential storage** — saved database passwords are
   encrypted with AES-256-GCM using a master key you control.
 - **Pagination & limits** — every query has a hard row cap with
@@ -107,8 +107,9 @@ claude mcp add database \
   workflow.
 - **Auto-completion** — resource and prompt-argument completion backed
   by a per-connection metadata cache.
-- **Confirmations** — destructive operations are gated behind MCP
-  elicitation prompts.
+- **Confirmations** — every write is gated behind an MCP elicitation
+  prompt, with destructive statements (DROP, TRUNCATE, unqualified
+  DELETE/UPDATE) called out explicitly in the prompt.
 
 ## Configuration
 

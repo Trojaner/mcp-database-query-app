@@ -83,7 +83,8 @@ Directory.Packages.props  # Central Package Management versions
    `ui://mcp-database-query-app/...` URI via `WithUiResourceMeta(...)`. UI-only helper
    tools (`ui.*`) must set `_meta.ui.visibility = ["app"]` so the model
    cannot see them.
-6. Destructive tools **must** route through
+6. Tools that change the database (writes and DDL alike, not just
+   destructive ones) **must** route through
    `IElicitationGateway.ConfirmAsync(...)` unless the caller passed an
    explicit `confirm=true` argument. Read-only connections must hard-block
    writes before the elicitation path is even reached.
@@ -124,8 +125,10 @@ checked against this list before merging.
 - [ ] `RedactedDescriptor` (or an equivalent redacting mapper) is used
       for every outbound descriptor serialization. The "no password leaks"
       integration test must still pass with the new code path covered.
-- [ ] Destructive DDL/DML (DROP, TRUNCATE, DELETE/UPDATE without WHERE,
-      ALTER DROP, TRUNCATE, `shutdown`, etc.) goes through
+- [ ] Any state-changing DDL/DML — ordinary writes (INSERT, CREATE,
+      qualified UPDATE/DELETE) as well as destructive ones (DROP,
+      TRUNCATE, DELETE/UPDATE without WHERE, ALTER DROP, `shutdown`) —
+      goes through
       `IElicitationGateway.ConfirmAsync` unless the caller passed
       `confirm=true`.
 - [ ] `ReadOnly` connections hard-refuse any non-query path, including
