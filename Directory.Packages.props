@@ -69,10 +69,18 @@
          7.2.0 is the last Apache-2.0 release. Bump only after a licence decision;
          the drop-in alternative is AwesomeAssertions (Apache-2.0 fork of 7.x). -->
     <PackageVersion Include="FluentAssertions" Version="7.2.0" />
-    <PackageVersion Include="Testcontainers" Version="4.13.0" />
+    <!-- Testcontainers 4.13.0 resolved SSH.NET 2025.1.0, which NuGet audit flags as
+         NU1903 (GHSA-q939-rpr3-3284 — path traversal in ScpClient's recursive
+         download lets a malicious SCP server write outside the target directory).
+         SSH.NET 2026.0.0 is the first patched release, and Testcontainers 4.14.0 is
+         the first release built against it, so the fix is a Testcontainers bump
+         rather than a transitive pin of SSH.NET onto a major version the library
+         was never compiled against. Keep the three Testcontainers packages on the
+         same version — the modules take an exact dependency on the core package. -->
+    <PackageVersion Include="Testcontainers" Version="4.15.0" />
     <PackageVersion Include="Xunit.SkippableFact" Version="1.5.61" />
-    <PackageVersion Include="Testcontainers.PostgreSql" Version="4.13.0" />
-    <PackageVersion Include="Testcontainers.MsSql" Version="4.13.0" />
+    <PackageVersion Include="Testcontainers.PostgreSql" Version="4.15.0" />
+    <PackageVersion Include="Testcontainers.MsSql" Version="4.15.0" />
     <PackageVersion Include="coverlet.collector" Version="10.0.1" />
   </ItemGroup>
 </Project>
