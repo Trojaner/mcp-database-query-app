@@ -96,7 +96,9 @@ claude mcp add database \
 - **Connection management** — open, ping, disconnect, and save
   pre-defined connection profiles.
 - **Querying** — parameterised SELECTs, paged results, non-query
-  execution, and EXPLAIN plans.
+  execution, and EXPLAIN plans. Any query tool can return its result as a
+  short pre-authenticated HTTP link instead of inline JSON
+  (`output: "link"`), keeping large results out of the model's context.
 - **Schema introspection** — list schemas, tables, columns, keys,
   indexes, roles, and databases, with batched describe calls.
 - **Saved scripts & notes** — store SQL snippets and attach notes to
@@ -138,6 +140,12 @@ encrypted with AES-256-GCM using a key resolved from
       "Http":  { "Enabled": false, "Urls": "http://127.0.0.1:5218" }
     },
     "Ui": { "Enabled": true },
+    "ResultLinks": {
+      "Enabled": true,
+      "Ttl": "02:00:00",
+      "BaseUrl": null,
+      "MaxEntries": 500
+    },
     "Secrets": { "KeyRef": "UserSecrets:McpDatabaseQueryApp:MasterKey" }
   }
 }
@@ -145,6 +153,49 @@ encrypted with AES-256-GCM using a key resolved from
 
 Every setting above is overridable via environment variable using the
 double-underscore convention (`McpDatabaseQueryApp__ReadOnlyByDefault=true`).
+
+### Result links (`output: "link"`)
+
+`db_query`, `db_query_next_page` and `db_explain` take an optional `output`
+argument:
+
+| `output`   | Behaviour                                                                 |
+| ---------- | ------------------------------------------------------------------------- |
+| `"inline"` | Default, and identical to previous versions: the result is in the response. |
+| `"link"`   | The same JSON is parked on the server; the response carries only `resultUrl`. |
+
+```jsonc
+// db_query with output: "link"
+{
+  "connectionId": "conn_abc123",
+  "columns": [ { "name": "id" }, { "name": "email" } ],
+  "rows": [],
+  "rowCount": 12043,
+  "resultUrl": "https://db.example.internal/r/1a2B3c4D5e6F7g8H9i0JkLmNoPqRsTuVw",
+  "resultUrlExpiresAt": "2026-09-08T12:00:00+00:00"
+}
+```
+
+`GET`ting that URL returns exactly the JSON `output: "inline"` would have
+produced, with the rows populated. Notes:
+
+- **The URL is the credential.** It carries 128 bits of entropy and is not
+  checked against any profile, ACL or bearer token — anyone holding the link
+  can read that one result until it expires. Only mint links for results the
+  recipient is allowed to see, and prefer HTTPS so the token is not on the wire
+  in clear text.
+- Links live in memory for `ResultLinks:Ttl` (2 hours by default) and are gone
+  after a restart. Unknown, malformed and expired tokens are all a plain 404.
+- `ResultLinks:MaxEntries` (500 by default) caps memory; reaching it evicts the
+  entries closest to expiry.
+- Set `ResultLinks:BaseUrl` whenever the server sits behind a reverse proxy —
+  without it the URL is built from the inbound request, which is wrong as soon
+  as the proxy rewrites host or scheme.
+- The row limit works exactly as it does inline: a link contains the rows the
+  inline call would have returned, so raise `limit` (or `limit: 0` with
+  `confirmUnlimited`) to put more of them behind the URL.
+- `output: "link"` requires the HTTP transport and is refused with an actionable
+  error under stdio unless `ResultLinks:BaseUrl` points at a reachable host.
 
 ### Seeding pre-defined connections
 

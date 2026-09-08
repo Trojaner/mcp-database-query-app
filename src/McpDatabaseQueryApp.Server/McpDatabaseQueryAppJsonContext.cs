@@ -3,6 +3,7 @@ using McpDatabaseQueryApp.Core.Connections;
 using McpDatabaseQueryApp.Core.Notes;
 using McpDatabaseQueryApp.Core.Providers;
 using McpDatabaseQueryApp.Core.Scripts;
+using McpDatabaseQueryApp.Server.Http;
 using McpDatabaseQueryApp.Server.Tools;
 
 namespace McpDatabaseQueryApp.Server;
@@ -49,6 +50,7 @@ namespace McpDatabaseQueryApp.Server;
 [JsonSerializable(typeof(ScriptRunResult))]
 [JsonSerializable(typeof(OpenUiResult))]
 [JsonSerializable(typeof(UiCsvResult))]
+[JsonSerializable(typeof(ResultLinkDescriptor))]
 
 // Core DTOs referenced by the results above.
 [JsonSerializable(typeof(RedactedDescriptor))]

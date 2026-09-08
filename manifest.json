@@ -68,7 +68,7 @@
     { "name": "db_ping", "description": "Check connectivity to a database." },
     { "name": "db_list_predefined", "description": "List predefined connection profiles." },
     { "name": "db_list_connections", "description": "List active connections." },
-    { "name": "db_query", "description": "Run a parameterised SELECT query. Optionally write results to a CSV file for large result sets." },
+    { "name": "db_query", "description": "Run a parameterised SELECT query. Optionally return the result as a short pre-authenticated HTTP link, or write it to a CSV file, for large result sets." },
     { "name": "db_query_next_page", "description": "Fetch the next page of a paginated query." },
     { "name": "db_execute", "description": "Execute a non-query SQL statement." },
     { "name": "db_explain", "description": "Return the execution plan for a query." },

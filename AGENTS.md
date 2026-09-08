@@ -144,6 +144,13 @@ checked against this list before merging.
       effect, and fails closed when the client cannot be asked.
 - [ ] SSL is required for pre-defined connections unless the entry
       explicitly opts out, and opting out logs a warning at startup.
+- [ ] Result links (`output="link"`) are only minted for payloads the
+      caller could already read inline. The token in the URL is the only
+      credential: it is generated with `RandomNumberGenerator`, stored as
+      a SHA-256 of its secret half, verified in constant time, kept in
+      memory only, and never written to a log or an MCP payload other
+      than the tool result that requested it. Unknown, malformed and
+      expired tokens must stay indistinguishable (all 404).
 - [ ] URL-mode elicitation URLs never contain user secrets, PII, or
       pre-authenticated tokens. Form-mode elicitation never requests a
       password, API key, or similar (the spec forbids it).
@@ -174,6 +181,21 @@ checked against this list before merging.
 4. Cursors are opaque base64-encoded tokens produced by `CursorCodec`.
    Do not let callers synthesize cursors — always validate through the
    codec.
+5. Every tool that returns a query result takes an optional `output`
+   argument (`"inline"`, the default, or `"link"`) parsed through
+   `OutputMode`. Link mode serializes the *same* result object inline
+   mode would have returned, parks it in `IResultLinkStore`
+   (`InMemoryResultLinkStore`: 2-hour TTL from
+   `McpDatabaseQueryApp:ResultLinks:Ttl`, capped at `MaxEntries`, dropped
+   on restart), and returns the envelope with the rows stripped plus
+   `resultUrl` / `resultUrlExpiresAt`. Serving happens at
+   `GET /r/{token}` (`MapResultLinks`), which is anonymous by design.
+   The row limit is unchanged by link mode — a link holds exactly the
+   rows an inline call would have returned.
+6. When you add a new tool that returns rows, wire `output` through
+   `OutputMode` and `ResultLinkFactory` rather than inventing a second
+   mechanism, and serialize with `McpDatabaseQueryAppJsonOptions.Tool`
+   so the linked JSON matches the inline contract byte for byte.
 
 ## 8. Testing requirements
 
@@ -232,6 +254,13 @@ checked against this list before merging.
   Dapper through `IMetadataStore`. Schema is migrated at startup by
   `SqliteSchema` against a `_schema_version` table — never mutate the
   schema from tools.
+- `McpDatabaseQueryApp:ResultLinks` configures `output="link"`:
+  `Enabled` (default true; false also unmaps `GET /r/{token}`), `Ttl`
+  (default `02:00:00`), `MaxEntries` (default 500), and `BaseUrl`. Leave
+  `BaseUrl` unset only when the server is directly exposed — links are
+  otherwise built from the inbound request and break behind a proxy that
+  rewrites host or scheme. Under stdio there is no request to derive
+  from, so `BaseUrl` is required for link mode to work at all.
 - The master key used for AES-GCM credential protection is resolved from
   `McpDatabaseQueryApp:Secrets:KeyRef` (`UserSecrets:…`, `Env:…`, `File:…`). Never
   hard-code a key in source.
@@ -248,6 +277,7 @@ checked against this list before merging.
 | Elicitation | `McpDatabaseQueryApp.Server/Elicitation/ElicitationGateway.cs`     |
 | Logging     | `McpDatabaseQueryApp.Server/Logging/McpLoggerProvider.cs`          |
 | UI          | `ui://mcp-database-query-app/results.html`, `ui://mcp-database-query-app/builder.html` |
+| Result links| `McpDatabaseQueryApp.Server/Http/*.cs`, `Core/Results/InMemoryResultLinkStore.cs` |
 
 ## 12. Provider-specific affordances
 

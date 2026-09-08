@@ -13,6 +13,7 @@ using McpDatabaseQueryApp.Server.Completions;
 using McpDatabaseQueryApp.Server.DependencyInjection;
 using McpDatabaseQueryApp.Server.Elicitation;
 using McpDatabaseQueryApp.Server.Hosting;
+using McpDatabaseQueryApp.Server.Http;
 using McpDatabaseQueryApp.Server.Metadata;
 using McpDatabaseQueryApp.Server.Prompts;
 using McpDatabaseQueryApp.Server.Resources;
@@ -101,6 +102,7 @@ static async Task RunWebAsync(string[] args, McpDatabaseQueryAppOptions options)
 
     app.UseProfileResolution();
     app.MapMcp();
+    app.MapResultLinks();
     if (adminApiOptions.Enabled)
     {
         app.MapAdminApi();
@@ -139,6 +141,13 @@ static void ConfigureServices(IServiceCollection services, IConfiguration config
     services.AddSingleton<CompletionRouter>();
     services.AddSingleton<ScriptPromptProvider>();
     services.AddSingleton<MutationGuard>();
+
+    // Result links need to see the inbound request to derive their public base
+    // URL. Registered unconditionally so QueryTools can take the same
+    // dependency under stdio, where HttpContext is simply always null and the
+    // factory falls back to configuration.
+    services.AddHttpContextAccessor();
+    services.AddSingleton<ResultLinkFactory>();
     services.AddHostedService<ResultSetJanitor>();
     services.AddHostedService<ConnectionReaper>();
 
@@ -148,22 +157,7 @@ static void ConfigureServices(IServiceCollection services, IConfiguration config
     services.AddSingleton<IAclStaticEntrySource>(sp => sp.GetRequiredService<AclBootstrapHostedService>());
     services.AddHostedService(sp => sp.GetRequiredService<AclBootstrapHostedService>());
 
-    // Per the MCP SDK docs, the correct way to make tool schema generation see
-    // user DTOs is to pass a preconfigured JsonSerializerOptions into each
-    // WithTools<T>(options) call. The SDK's own resolver goes first so protocol
-    // types (including experimental properties) keep their SDK contract; our
-    // source-gen context covers the McpDatabaseQueryApp DTOs; the reflection resolver is
-    // kept as a trailing fallback for `object?` query-row values that can't be
-    // described statically (see McpDatabaseQueryAppJsonContext).
-    var toolSerializerOptions = new JsonSerializerOptions
-    {
-        TypeInfoResolverChain =
-        {
-            McpJsonUtilities.DefaultOptions.TypeInfoResolver!,
-            McpDatabaseQueryAppJsonContext.Default,
-            new DefaultJsonTypeInfoResolver(),
-        },
-    };
+    var toolSerializerOptions = McpDatabaseQueryAppJsonOptions.Tool;
 
     var mcp = services.AddMcpServer(options =>
     {

@@ -22,6 +22,13 @@ public sealed class McpDatabaseQueryAppOptions
 
     public UiOptions Ui { get; set; } = new();
 
+    /// <summary>
+    /// Settings for the <c>output="link"</c> mode on the query tools, which
+    /// parks a result in memory and hands the caller a short pre-authenticated
+    /// HTTP URL instead of inlining the rows.
+    /// </summary>
+    public ResultLinkOptions ResultLinks { get; set; } = new();
+
     public LoggingOptions Logging { get; set; } = new();
 
     public SecretsOptions Secrets { get; set; } = new();
@@ -134,6 +141,39 @@ public sealed class HttpTransportOptions
 public sealed class UiOptions
 {
     public bool Enabled { get; set; } = true;
+}
+
+/// <summary>
+/// Configuration for HTTP result links (<c>output="link"</c>).
+/// </summary>
+public sealed class ResultLinkOptions
+{
+    /// <summary>
+    /// Whether the query tools accept <c>output="link"</c>. When false the
+    /// mode is refused with an actionable error and the HTTP endpoint is not
+    /// mapped.
+    /// </summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>
+    /// How long a minted link resolves for. Links are also dropped whenever
+    /// the server restarts, since the store is in-memory.
+    /// </summary>
+    public TimeSpan Ttl { get; set; } = TimeSpan.FromHours(2);
+
+    /// <summary>
+    /// Public origin (optionally with a path prefix) that links are built
+    /// against, e.g. <c>https://db.example.internal</c>. Leave unset to derive
+    /// it from the inbound request — set it explicitly whenever the server sits
+    /// behind a proxy that rewrites host or scheme.
+    /// </summary>
+    public string? BaseUrl { get; set; }
+
+    /// <summary>
+    /// Upper bound on live entries. Reaching it evicts the entries closest to
+    /// expiry. Set to 0 to disable the cap (bounded then only by the TTL).
+    /// </summary>
+    public int MaxEntries { get; set; } = 500;
 }
 
 public sealed class LoggingOptions

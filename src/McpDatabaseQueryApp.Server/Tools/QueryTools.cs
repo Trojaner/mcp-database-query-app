@@ -7,6 +7,7 @@ using McpDatabaseQueryApp.Core.Providers;
 using McpDatabaseQueryApp.Core.QueryExecution;
 using McpDatabaseQueryApp.Core.Results;
 using McpDatabaseQueryApp.Server.Elicitation;
+using McpDatabaseQueryApp.Server.Http;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Extensions.Apps;
 using ModelContextProtocol.Protocol;
@@ -27,6 +28,7 @@ public sealed class QueryTools
     private readonly IResultSetCache _cache;
     private readonly IElicitationGateway _elicitation;
     private readonly IQueryPipeline _pipeline;
+    private readonly ResultLinkFactory _links;
     private readonly McpDatabaseQueryAppOptions _options;
     private readonly ILogger<QueryTools> _logger;
 
@@ -36,6 +38,7 @@ public sealed class QueryTools
         IResultSetCache cache,
         IElicitationGateway elicitation,
         IQueryPipeline pipeline,
+        ResultLinkFactory links,
         McpDatabaseQueryAppOptions options,
         ILogger<QueryTools> logger)
     {
@@ -44,6 +47,7 @@ public sealed class QueryTools
         _cache = cache;
         _elicitation = elicitation;
         _pipeline = pipeline;
+        _links = links;
         _options = options;
         _logger = logger;
     }
@@ -59,6 +63,16 @@ public sealed class QueryTools
         return await ToolErrorHandler.WrapAsync(async () =>
         {
         ArgumentNullException.ThrowIfNull(args);
+
+        // Parse the delivery mode before touching the database so a typo costs
+        // a round-trip rather than a query.
+        var asLink = OutputMode.WantsLink(args.Output);
+        if (asLink && !string.IsNullOrWhiteSpace(args.CsvPath))
+        {
+            throw new ArgumentException(
+                "output=\"link\" and csvPath are mutually exclusive: the first parks the JSON result behind a URL, the second writes CSV to a file. Pick one.");
+        }
+
         if (!_registry.TryGet(args.ConnectionId, out var connection))
         {
             if (_options.AutoConnect)
@@ -158,7 +172,9 @@ public sealed class QueryTools
                 result.ExecutionMs,
                 ResultSetId: null,
                 summary.ToString(),
-                csvPath);
+                csvPath,
+                ResultUrl: null,
+                ResultUrlExpiresAt: null);
         }
 
         string? resultSetId = null;
@@ -168,7 +184,7 @@ public sealed class QueryTools
         }
 
         var text = BuildAsciiTable(result);
-        return new QueryToolResult(
+        var full = new QueryToolResult(
             args.ConnectionId,
             result.Columns,
             result.Rows,
@@ -177,7 +193,26 @@ public sealed class QueryTools
             result.ExecutionMs,
             resultSetId,
             text,
-            CsvPath: null);
+            CsvPath: null,
+            ResultUrl: null,
+            ResultUrlExpiresAt: null);
+
+        if (!asLink)
+        {
+            return full;
+        }
+
+        // Link mode publishes exactly the payload inline mode would have
+        // returned, then hands back the same envelope with the rows stripped —
+        // the model keeps the shape and the counts, the bytes stay on the server.
+        var link = _links.Create(full, typeof(QueryToolResult));
+        return full with
+        {
+            Rows = [],
+            TextTable = OutputMode.DescribeLink(result.RowCount, result.Truncated, result.ExecutionMs, link),
+            ResultUrl = link.Url,
+            ResultUrlExpiresAt = link.ExpiresAt,
+        };
         }, _logger).ConfigureAwait(false);
     }
 
@@ -187,22 +222,39 @@ public sealed class QueryTools
         [Description("result_ id returned by db_query.")] string resultSetId,
         [Description("Row offset within the cached result set.")] int offset,
         [Description("Page size. Defaults to 500.")] int? pageSize,
+        [Description(OutputMode.ParameterDescription)] string? output,
         CancellationToken cancellationToken)
     {
         return await ToolErrorHandler.WrapAsync(async () =>
         {
+        var asLink = OutputMode.WantsLink(output);
         var size = pageSize ?? 500;
         var page = await _cache.GetPageAsync(resultSetId, offset, size, cancellationToken).ConfigureAwait(false)
             ?? throw new KeyNotFoundException($"Result set '{resultSetId}' has expired or does not exist.");
 
-        return new QueryPageResult(
+        var full = new QueryPageResult(
             resultSetId,
             page.Columns,
             page.Rows,
             offset,
             offset + page.Rows.Count,
             page.TotalRows,
-            page.HasMore);
+            page.HasMore,
+            ResultUrl: null,
+            ResultUrlExpiresAt: null);
+
+        if (!asLink)
+        {
+            return full;
+        }
+
+        var link = _links.Create(full, typeof(QueryPageResult));
+        return full with
+        {
+            Rows = [],
+            ResultUrl = link.Url,
+            ResultUrlExpiresAt = link.ExpiresAt,
+        };
         }, _logger).ConfigureAwait(false);
     }
 
@@ -293,7 +345,19 @@ public sealed class QueryTools
         await _pipeline.ExecuteAsync(pipelineContext, cancellationToken).ConfigureAwait(false);
 
         var plan = await connection.ExplainAsync(pipelineContext.Sql, pipelineContext.Parameters, cancellationToken).ConfigureAwait(false);
-        return new ExplainToolResult(args.ConnectionId, plan.Format, plan.Plan);
+        var full = new ExplainToolResult(args.ConnectionId, plan.Format, plan.Plan, ResultUrl: null, ResultUrlExpiresAt: null);
+        if (!OutputMode.WantsLink(args.Output))
+        {
+            return full;
+        }
+
+        var link = _links.Create(full, typeof(ExplainToolResult));
+        return full with
+        {
+            Plan = $"Plan withheld from this response; fetch the full JSON at {link.Url} (expires {link.ExpiresAt:u}).",
+            ResultUrl = link.Url,
+            ResultUrlExpiresAt = link.ExpiresAt,
+        };
         }, _logger).ConfigureAwait(false);
     }
 
@@ -393,6 +457,9 @@ public sealed class QueryToolArgs
 
     [Description("When set, write the result rows to this CSV file (RFC 4180) instead of returning them inline. Use for large result sets. Relative paths resolve against the server's working directory; raise `limit` (or limit=0 with confirm_unlimited) to control how many rows are exported.")]
     public string? CsvPath { get; set; }
+
+    [Description(OutputMode.ParameterDescription)]
+    public string? Output { get; set; }
 }
 
 public sealed class ExecuteArgs
@@ -416,6 +483,9 @@ public sealed class ExplainArgs
     public required string Sql { get; set; }
 
     public Dictionary<string, object?>? Parameters { get; set; }
+
+    [Description(OutputMode.ParameterDescription)]
+    public string? Output { get; set; }
 }
 
 public sealed record QueryToolResult(
@@ -427,7 +497,9 @@ public sealed record QueryToolResult(
     long ExecutionMs,
     string? ResultSetId,
     string TextTable,
-    string? CsvPath);
+    string? CsvPath,
+    string? ResultUrl,
+    DateTimeOffset? ResultUrlExpiresAt);
 
 public sealed record QueryPageResult(
     string ResultSetId,
@@ -436,8 +508,15 @@ public sealed record QueryPageResult(
     int Offset,
     int NextOffset,
     long TotalRows,
-    bool HasMore);
+    bool HasMore,
+    string? ResultUrl,
+    DateTimeOffset? ResultUrlExpiresAt);
 
 public sealed record ExecuteResult(string ConnectionId, long RowsAffected, bool Executed);
 
-public sealed record ExplainToolResult(string ConnectionId, string Format, string Plan);
+public sealed record ExplainToolResult(
+    string ConnectionId,
+    string Format,
+    string Plan,
+    string? ResultUrl,
+    DateTimeOffset? ResultUrlExpiresAt);

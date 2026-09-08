@@ -10,6 +10,7 @@ using McpDatabaseQueryApp.Core.Storage;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace McpDatabaseQueryApp.Core.DependencyInjection;
@@ -52,6 +53,10 @@ public static class CoreServiceCollectionExtensions
         services.TryAddSingleton<IMetadataStore, SqliteMetadataStore>();
         services.TryAddSingleton<IResultLimiter, ResultLimiter>();
         services.TryAddSingleton<IResultSetCache, FileResultSetCache>();
+        services.TryAddSingleton<IResultLinkStore>(sp => new InMemoryResultLinkStore(
+            sp.GetRequiredService<McpDatabaseQueryAppOptions>(),
+            sp.GetRequiredService<ILogger<InMemoryResultLinkStore>>(),
+            sp.GetService<TimeProvider>()));
         services.TryAddSingleton<IScriptStore, MetadataScriptStore>();
         services.TryAddSingleton<INoteStore, MetadataNoteStore>();
         services.TryAddSingleton<IProviderRegistry, ProviderRegistry>();

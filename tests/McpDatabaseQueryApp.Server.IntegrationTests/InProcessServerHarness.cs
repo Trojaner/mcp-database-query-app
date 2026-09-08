@@ -11,6 +11,7 @@ using McpDatabaseQueryApp.Providers.SqlServer;
 using McpDatabaseQueryApp.Server.Caching;
 using McpDatabaseQueryApp.Server.Completions;
 using McpDatabaseQueryApp.Server.Elicitation;
+using McpDatabaseQueryApp.Server.Http;
 using McpDatabaseQueryApp.Server.Metadata;
 using McpDatabaseQueryApp.Server.Prompts;
 using McpDatabaseQueryApp.Server.Resources;
@@ -172,6 +173,8 @@ public sealed class InProcessServerHarness : IAsyncDisposable
         services.AddSingleton<CompletionRouter>();
         services.AddSingleton<MutationGuard>();
         services.AddSingleton<ScriptPromptProvider>();
+        services.AddHttpContextAccessor();
+        services.AddSingleton<ResultLinkFactory>();
 
         var clientToServer = new Pipe();
         var serverToClient = new Pipe();
